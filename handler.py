@@ -29,9 +29,10 @@ def boot():
     os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
     os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
     os.environ['TRANSFORMERS_CACHE']    = '/runpod-volume/hf-cache/huggingface'
-    env = os.environ.copy()
-    env["OLLAMA_ORIGINS"] = "*"
-    env["OLLAMA_MODELS"]  = "/runpod-volume/ollama-models"  
+    os.environ['OLLAMA_ORIGINS']         = '*'
+    os.environ['OLLAMA_MODELS']          = '/runpod-volume/ollama-models'
+
+    env = os.environ.copy()  
     subprocess.Popen(["ollama", "serve"], env=env,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     wait_for("Ollama", "http://localhost:11434/api/tags")
