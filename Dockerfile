@@ -20,7 +20,9 @@ RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
     ln -sf /usr/bin/python3.11 /usr/bin/python3
 
 # ── Layer 2: Ollama binary (changes rarely) ────────────────────────────────
-RUN curl -fsSL https://ollama.com/install.sh | sh
+RUN apt-get update && apt-get install -y curl ca-certificates \
+ && curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/local/bin/ollama \
+ && chmod +x /usr/local/bin/ollama
 
 # ── Layer 3: Heavy Python deps (changes occasionally) ─────────────────────
 # Install CPU-only torch first — saves ~2 GB vs CUDA torch for PaddleOCR/TrOCR
