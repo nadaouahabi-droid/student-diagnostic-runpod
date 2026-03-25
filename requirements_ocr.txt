@@ -6,8 +6,8 @@ flask>=3.0.0
 flask-cors>=4.0.0
 
 # PaddleOCR — print text detection + layout analysis
-paddleocr>=2.7.3
-paddlepaddle>=2.6.0          # CPU-only; swap for paddlepaddle-gpu if you have a GPU
+paddleocr==3.0.0
+paddlepaddle==3.0.0
 
 # TrOCR — handwriting refinement (Microsoft)
 transformers>=4.40.0
