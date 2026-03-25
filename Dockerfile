@@ -29,10 +29,11 @@ RUN apt-get update && apt-get install -y curl ca-certificates \
 # (Ollama handles GPU inference; these CPU libs only do OCR preprocessing)
 RUN pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
 
-RUN pip install --upgrade pip && \
+RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
     paddlepaddle==2.6.1 \
-    paddleocr==2.8.1
+    -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html && \
+    pip install --no-cache-dir paddleocr==2.8.1
 
 RUN pip install \
     transformers==4.44.2 \
