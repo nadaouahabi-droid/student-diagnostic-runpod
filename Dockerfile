@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ── Layer 1: System packages (changes rarely) ──────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-dev python3-pip \
+        python3.10 python3.10-dev python3-pip \
         curl wget git ca-certificates \
         libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
         libgomp1 libgcc-s1 \
