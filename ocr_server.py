@@ -4,8 +4,13 @@ OCR Server for Student Diagnostic System
 Pipeline: PaddleOCR (layout + print text) → TrOCR (handwriting refinement)
 Serves results to the HTML frontend at http://localhost:5005
 """
-
-import os, io, base64, sys, time, logging, traceback
+import os
+os.environ['PADDLEX_HOME']           = '/runpod-volume/paddle-cache/.paddlex'
+os.environ['FLAGS_use_mkldnn']       = '0'
+os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
+os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
+os.environ['TRANSFORMERS_CACHE']    = '/runpod-volume/hf-cache/huggingface'
+import io, base64, sys, time, logging, traceback
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 from flask import Flask, request, jsonify
@@ -31,8 +36,11 @@ def get_paddle():
     if _paddle is None:
         log.info("Loading PaddleOCR (first call)…")
         from paddleocr import PaddleOCR
-        _paddle = PaddleOCR(use_angle_cls=True, lang="en", show_log=False,
-                            use_gpu=False, enable_mkldnn=True)
+        _paddle = PaddleOCR(
+            use_angle_cls=True,
+            lang="en",
+            device="cpu",
+        )
         log.info("PaddleOCR ready.")
     return _paddle
 
@@ -75,7 +83,7 @@ def run_paddle(img: Image.Image):
     """Return list of dicts: {bbox, text, confidence}"""
     paddle = get_paddle()
     arr = np.array(img)
-    result = paddle.ocr(arr, cls=True)
+    result = paddle.ocr(arr)
     items = []
     if result and result[0]:
         for line in result[0]:
