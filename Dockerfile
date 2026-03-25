@@ -1,41 +1,63 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Student Diagnostic System v10 — RunPod Serverless on RTX 3090
-# Image registry: ghcr.io (free, unlimited private repos)
-#
-# Build strategy:
-#   - Models stored on RunPod Network Volume (/runpod-volume/ollama-models)
-#     → image stays ~3 GB instead of ~12 GB
-#     → image push/pull is fast
-#     → models load from NVMe volume at boot (~5s), not re-downloaded
-# ─────────────────────────────────────────────────────────────────────────────
-FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+# ─── Base: CUDA + Ollama runtime ───────────────────────────────────────────
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
-WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# ── System packages ───────────────────────────────────────────────────────────
+# ── Layer 1: System packages (changes rarely) ──────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl wget git \
-    libgl1 libglib2.0-0 libgomp1 \
-    libsm6 libxext6 libxrender-dev \
+        python3.11 python3.11-dev python3-pip \
+        curl wget git ca-certificates \
+        libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
+        libgomp1 libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Ollama ────────────────────────────────────────────────────────────────────
+# Symlink so 'python' works
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+# ── Layer 2: Ollama binary (changes rarely) ────────────────────────────────
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# ── Python packages ───────────────────────────────────────────────────────────
-# Copy requirements first so Docker caches this layer unless deps change
-COPY requirements_ocr.txt .
-RUN pip install --no-cache-dir runpod requests \
- && pip install --no-cache-dir -r requirements_ocr.txt
+# ── Layer 3: Heavy Python deps (changes occasionally) ─────────────────────
+# Install CPU-only torch first — saves ~2 GB vs CUDA torch for PaddleOCR/TrOCR
+# (Ollama handles GPU inference; these CPU libs only do OCR preprocessing)
+RUN pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
 
-# ── Application files ─────────────────────────────────────────────────────────
-COPY ocr_server.py .
-COPY handler.py    .
+RUN pip install \
+    paddlepaddle==2.6.1 \
+    paddleocr==2.8.1
 
-# ── Tell Ollama to load models from the Network Volume ────────────────────────
-# This path is where you'll mount your RunPod Network Volume
-ENV OLLAMA_MODELS=/runpod-volume/ollama-models
-ENV OLLAMA_ORIGINS=*
+RUN pip install \
+    transformers==4.44.2 \
+    sentencepiece \
+    timm
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Layer 4: App server deps (changes occasionally) ───────────────────────
+RUN pip install \
+    flask==3.0.3 \
+    flask-cors==4.0.1 \
+    runpod==1.7.3 \
+    requests==2.32.3 \
+    Pillow==10.4.0 \
+    numpy==1.26.4
+
+# ── Layer 5: Pre-download PaddleOCR model files into the image ────────────
+# These are small (< 200 MB total) and avoid a 60 s download on every cold start
+RUN python3 -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en', show_log=False, use_gpu=False)"
+
+# ── Layer 6: Pre-download TrOCR weights into the image ────────────────────
+# ~1.3 GB but worth it: eliminates 3–5 minute HuggingFace download at cold start
+RUN python3 -c "\
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel; \
+TrOCRProcessor.from_pretrained('microsoft/trocr-large-handwritten'); \
+VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-large-handwritten')"
+
+# ── Layer 7: App code (changes frequently — always last!) ─────────────────
+WORKDIR /app
+COPY ocr_server.py handler.py ./
+
 CMD ["python", "-u", "handler.py"]
