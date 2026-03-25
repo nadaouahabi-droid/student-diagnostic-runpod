@@ -24,6 +24,11 @@ def wait_for(name, url, retries=60, delay=2):
 
 
 def boot():
+    os.environ['PADDLEX_HOME']           = '/runpod-volume/paddle-cache/.paddlex'
+    os.environ['FLAGS_use_mkldnn']       = '0'
+    os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
+    os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
+    os.environ['TRANSFORMERS_CACHE']    = '/runpod-volume/hf-cache/huggingface'
     env = os.environ.copy()
     env["OLLAMA_ORIGINS"] = "*"
     env["OLLAMA_MODELS"]  = "/runpod-volume/ollama-models"  
