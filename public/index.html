@@ -636,31 +636,24 @@ async function callOCRPipeline(prompt, images) {
     return out.content || '';
   }
 
-  // Stage 1 — OCR batch
+  // Stage 1 — OCR batch (never skip; errors surface to the caller)
   updateLoadingText('analysis',
     `Reading exam pages… (${images.length} page${images.length > 1 ? 's' : ''})`,
     'Extracting handwriting and printed text'
   );
-  let ocrText = '';
-  try {
-    const ocrOut = await runpodCall({
-      action: 'ocr-batch',
-      images: images.map(i => i.base64),
-      refine_threshold: 0.72,
-      timeout_seconds: Math.round(timeoutMin * images.length * 60)
-    }, timeoutMin * images.length * 60000 + 30000);
-
-    if (!ocrOut.success) throw new Error(ocrOut.error || 'OCR service unavailable');
-    ocrText = ocrOut.combined_text || '';
-    updateLoadingText('analysis',
-      `Interpreting exam structure…`,
-      `${ocrOut.pages?.length || 0} page${(ocrOut.pages?.length||0)!==1?'s':''} processed`
-    );
-  } catch(_e) {
-    // OCR service unavailable — continue with empty ocrText so Stage 2 still runs the full vision pipeline
-    ocrText = '';
-    updateLoadingText('analysis', 'Processing pages with vision model…', 'OCR service unavailable, using vision fallback');
-  }
+  const ocrOut = await runpodCall({
+    action: 'ocr-batch',
+    images: images.map(i => i.base64),
+    refine_threshold: 0.72,
+    timeout_seconds: Math.round(timeoutMin * images.length * 60)
+  }, timeoutMin * images.length * 60000 + 30000);
+  
+  if (!ocrOut.success) throw new Error('Stage 1 OCR failed: ' + (ocrOut.error || 'unknown error'));
+  const ocrText = ocrOut.combined_text || '';
+  updateLoadingText('analysis',
+    `Interpreting exam structure…`,
+    `${ocrOut.pages?.length || 0} page${(ocrOut.pages?.length||0)!==1?'s':''} processed`
+  );
 
   // Stage 2 — Vision model per page
   const pageInterpretations = [];
