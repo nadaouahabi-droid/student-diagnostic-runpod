@@ -1,0 +1,23 @@
+# OCR Server dependencies
+# Install with: pip install -r requirements_ocr.txt
+
+# Web server
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# PaddleOCR — print text detection + layout analysis
+paddleocr==3.0.0
+paddlepaddle==3.0.0
+
+# TrOCR — handwriting refinement (Microsoft)
+transformers>=4.40.0
+torch>=2.1.0                 # CPU build is fine; add torchvision if needed
+sentencepiece>=0.1.99        # tokeniser for some TrOCR checkpoints
+
+# Image processing
+Pillow>=10.0.0
+numpy>=1.24.0
+opencv-python-headless>=4.8.0   # used internally by PaddleOCR
+
+# Utilities
+requests>=2.31.0

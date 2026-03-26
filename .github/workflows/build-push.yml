@@ -1,0 +1,82 @@
+name: Build & Push to GHCR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'handler.py'
+      - 'ocr_server.py'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # e.g. youruser/yourrepo
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # ── STEP 0: Free up ~10 GB of runner disk ──────────────────────────
+      - name: Free disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          docker system prune -af
+          echo "Disk after cleanup:"
+          df -h /
+
+      # ── STEP 1: Checkout ────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── STEP 2: Set up QEMU (for multi-arch, optional) ─────────────────
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # ── STEP 3: Set up Buildx with GitHub cache ─────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── STEP 4: Log in to GHCR ──────────────────────────────────────────
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # auto-injected, no setup needed
+
+      # ── STEP 5: Extract metadata for tags ───────────────────────────────
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      # ── STEP 6: Build & Push (with layer cache) ─────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha          # GitHub Actions cache
+          cache-to: type=gha,mode=max   # saves all layers, not just final
+          # Compress the image on push
+          provenance: false
+          sbom: false
