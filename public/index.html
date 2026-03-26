@@ -1,0 +1,2253 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Diagnostic System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --teal:#60A5FA;--teal-dim:#3B82F6;--teal-glow:rgba(96,165,250,0.22);
+  --amber:#f0a500;--red:#e04c4c;--green:#28a870;
+
+  --bg:#FFFFFF;--bg2:#F7F9FC;
+  --surface:#0d1b38;--surface2:#111f40;--surface3:#152448;
+  --navy:#0A1F44;--navy2:#1E3A8A;--navy3:#1e3570;
+  --panel:#0A1F44;
+  --panel-hi:rgba(255,255,255,0.05);
+  --panel-bd:rgba(192,192,192,0.14);
+  --panel-txt:rgba(255,255,255,0.95);
+  --panel-sub:rgba(192,192,192,0.65);
+  --panel-dim:rgba(192,192,192,0.38);
+  --text:#ffffff;--text2:rgba(255,255,255,0.72);--text3:#C0C0C0;
+  --bd:rgba(192,192,192,0.10);--bd2:rgba(192,192,192,0.18);
+  --sh:0 1px 3px rgba(0,0,0,0.35),0 4px 16px rgba(0,0,0,0.30);
+  --sh-lg:0 8px 40px rgba(0,0,0,0.55);
+  --sh-panel:0 4px 28px rgba(0,0,0,0.60);
+  --red-bg:rgba(224,76,76,0.12);--green-bg:rgba(40,168,112,0.11);
+  --amber-bg:rgba(240,165,0,0.11);--teal-bg:rgba(96,165,250,0.10);
+  --cream:#111f40;--cream2:#152448;
+
+  --r:10px;--rl:16px;--rxl:22px;
+  --ease:cubic-bezier(0.4,0,0.2,1);
+}
+
+[data-theme="dark"] {
+  --bg:#050d1f;--bg2:#070f24;
+  --surface:#0d1b38;--surface2:#111f40;--surface3:#152448;
+  --navy:#0A1F44;--navy2:#1E3A8A;--navy3:#1e3570;
+  --panel:#f3f3f3;
+  --panel-hi:rgba(255,255,255,0.05);
+  --panel-bd:rgba(192,192,192,0.14);
+  --panel-txt:rgba(255,255,255,0.95);
+  --panel-sub:rgba(192,192,192,0.65);
+  --panel-dim:rgba(192,192,192,0.38);
+  --text:#ffffff;--text2:rgba(255,255,255,0.72);--text3:#C0C0C0;
+  --bd:rgba(192,192,192,0.10);--bd2:rgba(192,192,192,0.18);
+  --sh:0 1px 3px rgba(0,0,0,0.45),0 4px 18px rgba(0,0,0,0.40);
+  --sh-lg:0 8px 44px rgba(0,0,0,0.65);
+  --sh-panel:0 4px 32px rgba(0,0,0,0.70);
+  --red-bg:rgba(224,76,76,0.13);--green-bg:rgba(40,168,112,0.12);
+  --amber-bg:rgba(240,165,0,0.12);--teal-bg:rgba(96,165,250,0.10);
+  --cream:#111f40;--cream2:#152448;
+}
+
+/* ═══ BASE ═══ */
+html{scroll-behavior:smooth}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100vh;font-size:15px;line-height:1.6;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(30,58,138,0.28) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(96,165,250,0.06) 0%, transparent 55%);
+  background-attachment:fixed;
+}
+
+/* ═══ NAV ═══ */
+nav{
+  background:rgba(10,31,68,0.92);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  padding:0 2rem;
+  display:flex;align-items:center;justify-content:space-between;
+  height:62px;position:sticky;top:0;z-index:100;
+  box-shadow:0 1px 0 rgba(192,192,192,0.10),0 4px 32px rgba(0,0,0,0.50);
+  border-bottom:1px solid rgba(192,192,192,0.12);
+}
+.nav-brand{
+  display:flex;align-items:center;gap:10px;
+  color:var(--panel-txt);
+  font-family:'DM Serif Display',serif;font-size:18px;
+  letter-spacing:-.01em;
+}
+.nav-icon{
+  width:34px;height:34px;
+  background:linear-gradient(135deg,#1E3A8A,#60A5FA);
+  border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 12px rgba(96,165,250,0.35);
+}
+.nav-steps{display:flex;align-items:center;gap:2px}
+.nav-step{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 13px;border-radius:20px;
+  font-size:12px;font-weight:500;
+  color:var(--panel-dim);cursor:default;
+  transition:all 0.2s var(--ease);
+}
+.nav-step.done{color:var(--panel-sub);cursor:pointer}
+.nav-step.done:hover{color:var(--panel-txt);background:var(--panel-hi)}
+.nav-step.active{color:#60A5FA;background:rgba(96,165,250,0.12)}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:currentColor;transition:all 0.2s}
+.nav-right{display:flex;align-items:center;gap:10px}
+.model-badge{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--panel-sub)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#ff6b6b;transition:background 0.3s;flex-shrink:0}
+.status-dot.ok{background:#60A5FA}
+.status-dot.checking{background:var(--amber);animation:pulse 1s infinite}
+
+/* Theme Toggle */
+.theme-toggle{
+  width:36px;height:36px;border-radius:10px;
+  background:var(--panel-hi);border:1px solid var(--panel-bd);
+  color:var(--panel-sub);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s var(--ease);
+  flex-shrink:0;
+}
+.theme-toggle:hover{background:rgba(255,255,255,0.12);color:var(--panel-txt)}
+.theme-toggle svg{transition:transform 0.4s var(--ease)}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+
+/* ═══ LAYOUT ═══ */
+.page{display:none}
+.page.active{display:block;animation:fadeUp 0.3s var(--ease)}
+.container{max-width:860px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+.container-wide{max-width:1020px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+
+/* ═══ HERO ═══ */
+.hero{
+  background:linear-gradient(180deg, #0A1F44 0%, #050d1f 100%);
+  padding:3.5rem 2rem 2.75rem;
+  text-align:center;position:relative;overflow:hidden;
+  border-bottom:1px solid rgba(192,192,192,0.12);
+}
+.hero-orb{
+  position:absolute;pointer-events:none;
+  border-radius:50%;filter:blur(60px);
+}
+.hero-orb-1{top:-80px;left:-80px;width:300px;height:300px;background:radial-gradient(circle,rgba(30,58,138,0.45) 0%,transparent 70%)}
+.hero-orb-2{bottom:-100px;right:-60px;width:380px;height:380px;background:radial-gradient(circle,rgba(96,165,250,0.12) 0%,transparent 70%)}
+.hero-orb-3{top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:200px;background:radial-gradient(ellipse,rgba(96,165,250,0.06) 0%,transparent 70%)}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;
+  color:#60A5FA;background:rgba(96,165,250,0.12);
+  padding:4px 14px;border-radius:20px;margin-bottom:1.1rem;
+  border:1px solid rgba(96,165,250,0.25);
+}
+.hero h1{
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(2rem,5vw,3rem);
+  color:var(--panel-txt);line-height:1.13;
+  margin-bottom:0.8rem;position:relative;z-index:1;
+  letter-spacing:-.02em;
+}
+.hero h1 em{color:#60A5FA;font-style:normal}
+.hero-sub{
+  color:var(--panel-sub);font-size:15px;
+  max-width:480px;margin:0 auto 1.75rem;
+  position:relative;z-index:1;line-height:1.65;
+}
+.hero-pills{
+  display:flex;justify-content:center;flex-wrap:wrap;
+  gap:8px;position:relative;z-index:1;
+}
+.pill{
+  font-size:11px;padding:4px 13px;border-radius:20px;
+  border:1px solid rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.45);
+  display:flex;align-items:center;gap:6px;
+}
+.pill span{color:var(--teal)}
+
+/* ═══ CARDS ═══ */
+.card{
+  background:linear-gradient(145deg, rgba(14,27,56,0.98), rgba(10,20,45,0.95));
+  border-radius:var(--rl);
+  border:1px solid rgba(192,192,192,0.12);
+  box-shadow:0 2px 4px rgba(0,0,0,0.30),0 6px 20px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.04);
+  padding:1.5rem;margin-bottom:1.25rem;
+  transition:border-color 0.25s var(--ease),box-shadow 0.25s var(--ease);
+}
+.card:hover{
+  border-color:rgba(192,192,192,0.20);
+  box-shadow:0 2px 4px rgba(0,0,0,0.35),0 8px 28px rgba(0,0,0,0.35),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.card-title{
+  font-size:13px;font-weight:600;margin-bottom:1.1rem;
+  color:var(--text);display:flex;align-items:center;gap:8px;
+  letter-spacing:.01em;
+}
+.card-title-icon{
+  width:26px;height:26px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+}
+
+/* ═══ FORMS ═══ */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.form-field{margin-bottom:1rem}
+.form-label{
+  display:block;font-size:11px;font-weight:600;
+  letter-spacing:0.07em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:6px;
+}
+input[type="text"],input[type="password"],input[type="url"],input[type="number"],select,textarea{
+  width:100%;padding:10px 14px;
+  border:1.5px solid var(--bd2);border-radius:var(--r);
+  font-family:'DM Sans',sans-serif;font-size:14px;
+  color:var(--text);background:var(--surface);
+  transition:border-color 0.18s,box-shadow 0.18s,background 0.35s;
+  outline:none;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:#60A5FA;
+  box-shadow:0 0 0 3px rgba(96,165,250,0.18);
+}
+textarea{min-height:220px;resize:vertical;line-height:1.65;font-size:13px}
+select{cursor:pointer}
+[data-theme="dark"] input[type="text"],[data-theme="dark"] input[type="url"],
+[data-theme="dark"] input[type="number"],[data-theme="dark"] select,[data-theme="dark"] textarea{
+  background:var(--surface2);border-color:var(--bd2);
+}
+
+/* ═══ BUTTONS ═══ */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:10px 20px;border-radius:var(--r);
+  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;
+  cursor:pointer;border:1.5px solid transparent;
+  transition:all 0.18s var(--ease);white-space:nowrap;
+}
+.btn:active{transform:scale(0.97)}
+.btn-primary{
+  background:#60A5FA;color:#ffffff;border-color:#60A5FA;
+  box-shadow:0 2px 12px rgba(96,165,250,0.30),0 0 0 0 rgba(96,165,250,0);
+}
+.btn-primary:hover{
+  background:#3B82F6;border-color:#3B82F6;
+  box-shadow:0 4px 20px rgba(96,165,250,0.45),0 0 24px rgba(96,165,250,0.15);
+}
+.btn-secondary{
+  background:transparent;color:#C0C0C0;border-color:#C0C0C0;
+}
+.btn-secondary:hover{background:rgba(192,192,192,0.08);color:#ffffff}
+.btn-sm{padding:7px 14px;font-size:13px}
+.btn-navy{background:var(--navy);color:white;border-color:var(--navy)}
+.btn-navy:hover{background:var(--navy2)}
+.action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* ═══ PIPELINE SETTINGS (no tabs) ═══ */
+.pipeline-panel{
+  background:linear-gradient(160deg, rgba(10,31,68,0.98), rgba(6,16,40,0.96));
+  border-radius:var(--rl);padding:1.5rem;margin-bottom:1.5rem;
+  border:1px solid rgba(192,192,192,0.13);
+  box-shadow:0 4px 32px rgba(0,0,0,0.50),inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.pipeline-panel-header{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  margin-bottom:1.25rem;flex-wrap:wrap;gap:10px;
+}
+.pipeline-panel-title{
+  font-family:'DM Serif Display',serif;font-size:16px;
+  color:var(--panel-txt);margin-bottom:3px;letter-spacing:-.01em;
+}
+.pipeline-panel-sub{font-size:12px;color:var(--panel-sub)}
+.pipeline-test-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 15px;border-radius:var(--r);
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;
+  background:var(--panel-hi);color:var(--panel-sub);
+  border:1px solid var(--panel-bd);cursor:pointer;
+  transition:all 0.18s var(--ease);white-space:nowrap;
+}
+.pipeline-test-btn:hover{background:rgba(255,255,255,0.10);color:var(--panel-txt)}
+
+/* Pipeline diagram */
+.pipeline-diagram{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:14px 16px;
+  background:rgba(0,0,0,0.18);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:var(--r);margin-bottom:1.25rem;
+}
+.pipe-step{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:72px}
+.pipe-box{
+  font-size:11px;font-weight:700;padding:5px 10px;
+  border-radius:7px;text-align:center;white-space:nowrap;
+  background:rgba(96,165,250,0.15);color:#60A5FA;
+  border:1px solid rgba(96,165,250,0.28);
+}
+.pipe-box.amber{background:rgba(240,165,0,0.14);color:#e8a500;border-color:rgba(240,165,0,0.28)}
+.pipe-box.purple{background:rgba(124,92,191,0.18);color:#b89cf0;border-color:rgba(124,92,191,0.28)}
+.pipe-label{font-size:10px;color:var(--panel-dim);text-align:center}
+.pipe-arrow{color:rgba(255,255,255,0.18);font-size:14px;flex-shrink:0}
+
+/* Pipeline fields */
+.pipeline-fields{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.pipeline-field{flex:1;min-width:170px}
+.pipeline-field-sm{max-width:120px}
+.pipeline-label{
+  font-size:11px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--panel-dim);margin-bottom:5px;
+}
+.p-input{
+  background:var(--panel-hi) !important;
+  border-color:var(--panel-bd) !important;
+  color:var(--panel-txt) !important;
+}
+.p-input::placeholder{color:var(--panel-dim) !important}
+.p-input:focus{
+  border-color:var(--teal) !important;
+  box-shadow:0 0 0 3px rgba(96,165,250,0.18) !important;
+}
+.conn-status{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--panel-sub);
+  padding:9px 14px;
+  background:rgba(0,0,0,0.15);
+  border:1px solid var(--panel-bd);
+  border-radius:var(--r);margin-top:12px;
+}
+
+/* ═══ MODE TOGGLE ═══ */
+.mode-toggle{
+  display:flex;gap:0;margin-bottom:1rem;
+  border:1.5px solid var(--bd2);border-radius:var(--r);overflow:hidden;
+}
+.mode-btn{
+  flex:1;padding:9px 14px;font-size:13px;font-weight:500;
+  font-family:'DM Sans',sans-serif;border:none;
+  background:var(--surface);color:var(--text3);cursor:pointer;
+  transition:all 0.18s;display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.mode-btn:not(:last-child){border-right:1.5px solid var(--bd2)}
+.mode-btn.active{background:linear-gradient(135deg,#1E3A8A,#1a327a);color:white;box-shadow:inset 0 1px 0 rgba(96,165,250,0.20)}
+.mode-btn:hover:not(.active){background:var(--surface2);color:var(--text)}
+
+/* ═══ UPLOAD ZONE ═══ */
+.upload-zone{
+  border:2px dashed var(--bd2);border-radius:var(--rl);
+  padding:2.75rem 1.5rem;text-align:center;cursor:pointer;
+  transition:all 0.2s var(--ease);background:var(--surface);
+  position:relative;
+}
+.upload-zone:hover,.upload-zone.drag-over{border-color:#60A5FA;background:rgba(96,165,250,0.07)}
+.upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-icon{font-size:2.5rem;margin-bottom:0.75rem;display:block}
+.upload-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+.upload-sub{font-size:13px;color:var(--text3)}
+.fmt-badges{display:flex;justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+.fmt{font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;background:var(--surface2);color:var(--text3)}
+.fmt.featured{background:var(--teal-bg);color:var(--teal);border:1px solid rgba(96,165,250,0.22)}
+.thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px}
+.thumb{position:relative;border-radius:var(--r);overflow:hidden;border:1.5px solid var(--bd);aspect-ratio:1;background:var(--surface2)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb-rm{
+  position:absolute;top:4px;right:4px;
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(0,0,0,0.55);color:white;
+  font-size:10px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border:none;transition:background 0.15s;
+}
+.thumb-rm:hover{background:var(--red)}
+.thumb-lbl{
+  position:absolute;bottom:0;left:0;right:0;
+  background:rgba(0,0,0,0.6);color:white;
+  font-size:10px;padding:3px 5px;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ═══ METRICS ═══ */
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
+.metric-card{
+  background:var(--surface);border:1px solid var(--bd);
+  border-radius:var(--r);padding:1rem 1.1rem;box-shadow:var(--sh);
+}
+.metric-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.metric-val{font-family:'DM Serif Display',serif;font-size:28px;line-height:1}
+.mv-red{color:var(--red)}.mv-green{color:var(--green)}.mv-amber{color:var(--amber)}.mv-teal{color:var(--teal)}.mv-navy{color:var(--text)}
+
+/* ═══ TOPIC ROWS ═══ */
+.topic-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bd)}
+.topic-row:last-child{border-bottom:none}
+.topic-name{flex:1.2;font-size:13px;font-weight:500}
+.bar-wrap{flex:2;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.bar{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(.4,0,.2,1)}
+.topic-pct{font-size:12px;font-weight:600;width:38px;text-align:right}
+.chip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.chip-r{background:var(--red-bg);color:var(--red)}
+.chip-a{background:var(--amber-bg);color:#9a6500}
+.chip-g{background:var(--green-bg);color:#1a7a50}
+[data-theme="dark"] .chip-a{color:#e8a500}
+
+/* ═══ MISTAKES ═══ */
+.mistake-card{
+  border-radius:var(--r);border-left:3px solid var(--red);
+  background:var(--red-bg);padding:10px 14px;margin-bottom:8px;
+}
+.mistake-title{font-size:13px;font-weight:600;color:var(--red);margin-bottom:3px}
+.mistake-desc{font-size:12px;color:var(--text2);line-height:1.55}
+
+/* ═══ STEPS ═══ */
+.step-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--bd)}
+.step-item:last-child{border-bottom:none}
+.step-badge{width:32px;height:32px;min-width:32px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+[data-theme="dark"] .step-badge{background:var(--surface3)}
+.step-body{flex:1}
+.step-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.step-desc{font-size:13px;color:var(--text2);margin-bottom:6px;line-height:1.55}
+.milestone{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--teal-dim);font-weight:600;background:var(--teal-bg);padding:3px 10px;border-radius:20px;margin-top:4px}
+
+/* ═══ RESULT HEADER ═══ */
+.result-header{
+  background:var(--panel);
+  border:1px solid var(--panel-bd);
+  border-radius:var(--rl);padding:1.5rem;margin-bottom:1.25rem;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:1rem;flex-wrap:wrap;
+  box-shadow:var(--sh-panel);
+}
+.result-header-info h3{font-family:'DM Serif Display',serif;font-size:20px;color:var(--panel-txt);font-weight:400;margin-bottom:4px;letter-spacing:-.01em}
+.result-header-info p{font-size:13px;color:var(--panel-sub)}
+.rhs-score .big{font-family:'DM Serif Display',serif;font-size:44px;line-height:1;color:white}
+.rhs-score .sub{font-size:12px;color:var(--panel-sub);margin-top:4px;text-align:right}
+
+/* ═══ SECTION HEADERS ═══ */
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px}
+.section-hd h2{font-family:'DM Serif Display',serif;font-size:24px;font-weight:400;color:var(--text);letter-spacing:-.02em}
+.section-hd p{font-size:13px;color:var(--text3)}
+
+/* ═══ TABLE ═══ */
+.qb-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:.5rem}
+.qb-table th{
+  background:var(--navy);color:rgba(255,255,255,0.65);
+  font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.04em;padding:9px 12px;text-align:left;
+}
+[data-theme="dark"] .qb-table th{background:var(--surface3)}
+.qb-table th:first-child{border-radius:8px 0 0 0}
+.qb-table th:last-child{border-radius:0 8px 0 0}
+.qb-table td{padding:8px 12px;border-bottom:1px solid var(--bd);color:var(--text2);vertical-align:top}
+.qb-table tr:hover td{background:var(--surface2)}
+.qb-table tr:last-child td{border-bottom:none}
+.qb-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.qb-correct{background:var(--green-bg);color:#1a7a50}
+.qb-careless{background:var(--amber-bg);color:#9a6500}
+.qb-concept{background:var(--red-bg);color:var(--red)}
+[data-theme="dark"] .qb-careless{color:#e8a500}
+[data-theme="dark"] .qb-correct{color:#2dcb86}
+
+/* ═══ TAGS ═══ */
+.tag{display:inline-block;font-size:12px;padding:3px 10px;background:var(--surface2);color:var(--text2);border-radius:20px;margin:2px}
+.tag-g{background:var(--green-bg);color:#1a7a50}
+.tag-r{background:var(--red-bg);color:var(--red)}
+[data-theme="dark"] .tag-g{color:#2dcb86}
+
+/* ═══ ALERTS ═══ */
+.alert-danger{background:var(--red-bg);border:1px solid rgba(224,76,76,0.18);border-left:3px solid var(--red);border-radius:var(--r);padding:12px 16px;margin-bottom:12px}
+.alert-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px}
+.alert-item{font-size:13px;color:var(--text2);padding:2px 0}
+
+/* ═══ CONCEPT GAP ═══ */
+.concept-gap-item{padding:10px 14px;border-left:3px solid var(--red);background:var(--red-bg);border-radius:0 var(--r) var(--r) 0;margin-bottom:8px}
+.concept-gap-topic{font-size:13px;font-weight:700;color:var(--red);margin-bottom:3px}
+.concept-gap-desc{font-size:12px;color:var(--text2);line-height:1.55}
+
+/* ═══ OVERVIEW GRID (Report) ═══ */
+.report-overview-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.report-section-title{
+  font-family:'DM Serif Display',serif;font-size:16px;
+  color:var(--text);font-weight:400;margin-bottom:.75rem;
+  display:flex;align-items:center;gap:8px;letter-spacing:-.01em;
+}
+.report-section-title::after{content:'';flex:1;height:1px;background:var(--bd2)}
+.overview-block{background:var(--surface);border:1px solid var(--bd);border-radius:var(--rl);padding:1.25rem;box-shadow:var(--sh)}
+.overview-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd);font-size:13px}
+.overview-row:last-child{border-bottom:none}
+.overview-label{color:var(--text3);font-weight:500}
+.overview-value{font-weight:600;color:var(--text)}
+.overview-value.highlight{color:var(--teal);font-size:15px}
+.overview-value.potential{color:var(--green);font-size:14px}
+.diag-block{background:var(--panel);border:1px solid var(--panel-bd);border-radius:var(--rl);padding:1.25rem}
+.diag-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--panel-bd);font-size:13px}
+.diag-row:last-child{border-bottom:none}
+.diag-label{color:var(--panel-sub)}
+.diag-value{font-weight:700;color:var(--panel-txt)}
+.diag-value.red{color:var(--red)}.diag-value.amber{color:var(--amber)}.diag-value.teal{color:var(--teal)}
+
+/* ═══ FEEDBACK BLOCK ═══ */
+.feedback-block{background:var(--panel);border:1px solid var(--panel-bd);border-radius:var(--rl);padding:1.25rem}
+.feedback-text{font-size:14px;color:var(--panel-sub);line-height:1.75}
+
+/* ═══ INFO BOXES ═══ */
+.info-box{background:var(--amber-bg);border:1px solid rgba(240,165,0,0.2);border-radius:var(--r);padding:10px 14px;font-size:13px;color:#7a5c00;margin-bottom:12px;line-height:1.5}
+.info-box.teal{background:var(--teal-bg);border-color:rgba(96,165,250,0.25);color:#60A5FA}
+.info-box.green{background:var(--green-bg);border-color:rgba(40,168,112,0.22);color:#1a5c3a}
+[data-theme="dark"] .info-box{color:#d4a000}
+[data-theme="dark"] .info-box.teal{color:#60A5FA}
+[data-theme="dark"] .info-box.green{color:#2dcb86}
+
+/* ═══ LOADING ═══ */
+.loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;gap:0}
+.spinner{width:36px;height:36px;border:2.5px solid var(--bd2);border-top-color:#60A5FA;border-radius:50%;animation:spin 0.75s linear infinite;margin-bottom:1rem}
+.loading-text{font-size:14px;color:var(--text3)}
+.loading-sub{font-size:12px;color:var(--text3);margin-top:4px;opacity:.7}
+.page-progress{width:100%;max-width:340px;margin-top:14px}
+.pp-label{font-size:11px;color:var(--text3);margin-bottom:5px;text-align:center}
+.pp-bar-wrap{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.pp-bar{height:100%;background:#60A5FA;border-radius:2px;transition:width 0.4s ease}
+.pp-dots{display:flex;justify-content:center;gap:4px;margin-top:6px;flex-wrap:wrap}
+.pp-dot{width:9px;height:9px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--bd2);transition:all 0.2s}
+.pp-dot.done{background:#60A5FA;border-color:#60A5FA}
+.pp-dot.active{background:var(--amber);border-color:var(--amber);animation:pulse 1s infinite}
+
+/* ═══ WORKSHEET ═══ */
+.ws-q{background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;box-shadow:var(--sh)}
+.ws-q-header{display:flex;gap:12px}
+.ws-q-num{font-family:'DM Serif Display',serif;font-size:20px;color:#60A5FA;min-width:28px}
+.ws-meta{display:flex;align-items:center;gap:8px;margin-top:8px}
+.ws-topic{font-size:11px;background:var(--surface2);color:var(--text3);padding:2px 10px;border-radius:20px;font-weight:500}
+.ws-marks{font-size:11px;color:var(--text3)}
+.ws-hint{margin-top:8px;font-size:12px;color:#60A5FA;background:rgba(96,165,250,0.09);padding:7px 11px;border-radius:8px}
+.ws-answer{margin-top:10px;border-top:1px dashed var(--bd2);padding-top:10px}
+.report-body{font-size:14px;color:var(--text2);line-height:1.75}
+.report-body h3{font-family:'DM Serif Display',serif;font-size:17px;color:var(--text);margin:1.25rem 0 .5rem;font-weight:400}
+.report-body strong{font-weight:600;color:var(--text)}
+.report-body p{margin-bottom:.75rem}
+.ws-textarea{
+  width:100%;border:1.5px solid var(--bd2);border-radius:var(--r);
+  padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;
+  color:var(--text);background:var(--surface2);
+  resize:vertical;outline:none;
+  transition:border-color 0.15s,box-shadow 0.15s;line-height:1.6;
+}
+.ws-textarea:focus{border-color:#60A5FA;box-shadow:0 0 0 3px rgba(96,165,250,0.18);background:var(--surface)}
+.ws-textarea.working{min-height:90px}
+.ws-textarea.final{min-height:40px}
+.ws-textarea.mc-answer{min-height:36px}
+.ws-textarea.explanation{min-height:100px}
+.ws-textarea.answered{border-color:#60A5FA}
+.ws-field-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;display:block}
+.ws-feedback{margin-top:10px;border-radius:var(--r);overflow:hidden;border:1.5px solid var(--bd)}
+.ws-feedback-correct{background:var(--green-bg);border-color:rgba(40,168,112,0.25);padding:10px 14px}
+.ws-feedback-wrong{background:var(--red-bg);border-color:rgba(224,76,76,0.20);padding:10px 14px}
+.ws-feedback-label{font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.ws-feedback-label.correct{color:#1a7a50}
+.ws-feedback-label.wrong{color:var(--red)}
+[data-theme="dark"] .ws-feedback-label.correct{color:#2dcb86}
+.ws-feedback-body{font-size:12px;line-height:1.6;color:var(--text2)}
+.ws-feedback-answer{font-size:13px;font-weight:600;color:var(--text);margin-top:5px}
+.ws-submit-area{
+  background:var(--surface2);border-radius:var(--rl);
+  padding:1.25rem;text-align:center;margin-top:1rem;
+  border:2px dashed var(--bd2);transition:all 0.2s;
+}
+.ws-submit-area.ready{background:rgba(96,165,250,0.08);border-color:#60A5FA;border-style:solid}
+.ws-submit-count{font-size:13px;color:var(--text3);margin-bottom:10px}
+.ws-result-header{
+  background:var(--panel);border:1px solid var(--panel-bd);
+  border-radius:var(--rl);padding:1.25rem;margin-top:1rem;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:1rem;
+}
+.ws-result-score{font-family:'DM Serif Display',serif;font-size:38px;color:white;line-height:1}
+.ws-result-sub{font-size:12px;color:var(--panel-sub);margin-top:3px}
+.ws-checking{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text3);padding:14px}
+
+/* ═══ PRINT ═══ */
+@media print{
+  nav,.no-print{display:none!important}
+  .page{display:block!important}
+  #page-input,#page-analysis,#page-report,#page-plan{display:none!important}
+  body{background:white}
+  .card{box-shadow:none}
+  .ws-textarea{border:1px solid #ccc!important;background:white!important}
+}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:640px){
+  .form-grid{grid-template-columns:1fr}
+  .metric-grid{grid-template-columns:1fr 1fr}
+  nav{padding:0 1rem}
+  .nav-steps{display:none}
+  .container,.container-wide{padding:1.5rem 1rem 3rem}
+  .report-overview-grid{grid-template-columns:1fr}
+  .pipeline-fields{flex-direction:column}
+  .pipeline-field,.pipeline-field-sm{width:100%;max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      </svg>
+    </div>
+    LearnDiag
+  </div>
+
+  <div class="nav-steps">
+    <div class="nav-step active" id="navs-input"     onclick="goPage('input')">    <div class="nav-dot"></div>Input</div>
+    <div class="nav-step"        id="navs-analysis"  onclick="goPage('analysis')"> <div class="nav-dot"></div>Analysis</div>
+    <div class="nav-step"        id="navs-report"    onclick="navToReport()">      <div class="nav-dot"></div>Report</div>
+    <div class="nav-step"        id="navs-plan"      onclick="goPage('plan')">     <div class="nav-dot"></div>Plan</div>
+    <div class="nav-step"        id="navs-worksheet" onclick="navToWorksheet()">   <div class="nav-dot"></div>Worksheet</div>
+  </div>
+
+  <div class="nav-right">
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" id="theme-btn">
+      <!-- Moon icon (shown in light mode) -->
+      <svg id="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <!-- Sun icon (shown in dark mode, hidden by default) -->
+      <svg id="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+    <div class="model-badge">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-label">OCR Pipeline</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════ INPUT PAGE ═══════ -->
+<div id="page-input" class="page active">
+  <div class="hero">
+    <div class="hero-orb hero-orb-1"></div>
+    <div class="hero-orb hero-orb-2"></div>
+    <div class="hero-orb hero-orb-3"></div>
+    <h1>Student <em>Diagnostic</em><br>System</h1>
+  </div>
+
+  <div class="container">
+
+    <!-- Pipeline Settings (no tabs, always OCR Pipeline) -->
+    <div class="pipeline-panel">
+      <div class="pipeline-panel-header">
+        <div>
+          <div class="pipeline-panel-title">Pipeline Configuration</div>
+          <div class="pipeline-panel-sub">PaddleOCR + TrOCR + Qwen2.5-VL via RunPod Serverless</div>
+        </div>
+        <button class="pipeline-test-btn" onclick="testConnection()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Test connection
+        </button>
+      </div>
+
+      <div class="pipeline-diagram">
+        <div class="pipe-step"><div class="pipe-box">PDF / Images</div><div class="pipe-label">Input</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><div class="pipe-box">PaddleOCR</div><div class="pipe-label">Text + layout</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><div class="pipe-box amber">TrOCR</div><div class="pipe-label">Handwriting</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><div class="pipe-box purple">Qwen2.5-VL</div><div class="pipe-label">Marks / structure</div></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><div class="pipe-box">Analysis</div><div class="pipe-label">Diagnostic JSON</div></div>
+      </div>
+
+      <div class="pipeline-fields">
+        <!-- RunPod Endpoint URL and API Key are now stored server-side (.env).
+             The frontend never touches the key. This field is kept read-only
+             so operators can verify which endpoint is active. -->
+        <div class="pipeline-field">
+          <div class="pipeline-label">RunPod Endpoint <span style="font-weight:400;text-transform:none;letter-spacing:0">(set in server .env)</span></div>
+          <input class="p-input" type="text" id="ocr-ollama-url" placeholder="Configured server-side — not required here" readonly style="opacity:0.5;cursor:not-allowed">
+        </div>
+        <!-- ocr-server-url kept hidden for legacy code compatibility -->
+        <input type="hidden" id="ocr-server-url" value="">
+        <input type="hidden" id="runpod-api-key" value="">
+        <div class="pipeline-field">
+          <div class="pipeline-label">Vision model</div>
+          <select class="p-input" id="ocr-vision-model">
+            <option value="qwen2.5vl:7b-q4_K_M">qwen2.5vl:7b-q4_K_M ⭐ (~4.7 GB)</option>
+            <option value="qwen2.5vl:7b-q8_0">qwen2.5vl:7b-q8_0 (best, ~8 GB)</option>
+            <option value="qwen2.5vl:3b-q4_K_M">qwen2.5vl:3b-q4_K_M (~2 GB)</option>
+            <option value="minicpm-v">minicpm-v (~5.5 GB)</option>
+            <option value="llava:7b-q4_0">llava:7b-q4_0 (~4 GB)</option>
+          </select>
+        </div>
+        <div class="pipeline-field">
+          <div class="pipeline-label">Text model</div>
+          <select class="p-input" id="ocr-text-model">
+            <option value="qwen2.5:7b-instruct-q4_K_M">qwen2.5:7b-instruct-q4_K_M ⭐ (~4.4 GB)</option>
+            <option value="qwen2.5:7b-instruct-q8_0">qwen2.5:7b-instruct-q8_0 (~8 GB)</option>
+            <option value="qwen2.5:3b">qwen2.5:3b (~2 GB)</option>
+            <option value="mistral">mistral (~4.1 GB)</option>
+          </select>
+        </div>
+        <div class="pipeline-field pipeline-field-sm">
+          <div class="pipeline-label">Timeout/page (min)</div>
+          <input class="p-input" type="number" id="ocr-timeout" value="15" min="3" max="120">
+        </div>
+      </div>
+
+      <!-- Hidden Ollama-only fields (for internal fallback use) -->
+      <div style="display:none">
+        <input type="url" id="ollama-url" value="http://localhost:11434">
+        <select id="ollama-vision"><option value="qwen2.5vl:7b-q4_K_M">qwen2.5vl:7b-q4_K_M</option><option value="qwen2.5vl:7b-q8_0">qwen2.5vl:7b-q8_0</option><option value="qwen2.5vl:3b-q4_K_M">qwen2.5vl:3b-q4_K_M</option><option value="minicpm-v">minicpm-v</option><option value="llava:7b-q4_0">llava:7b-q4_0</option><option value="llama3.2-vision">llama3.2-vision</option></select>
+        <select id="ollama-text"><option value="qwen2.5:7b-instruct-q4_K_M">qwen2.5:7b-instruct-q4_K_M</option><option value="qwen2.5:7b-instruct-q8_0">qwen2.5:7b-instruct-q8_0</option><option value="qwen2.5:3b">qwen2.5:3b</option><option value="mistral">mistral</option><option value="llama3.2">llama3.2</option></select>
+        <input type="number" id="ollama-timeout" value="15">
+      </div>
+
+      <div class="conn-status" id="conn-status">
+        <div class="status-dot" id="conn-dot"></div>
+        <span id="conn-text">Click "Test connection" to verify your setup</span>
+      </div>
+    </div>
+
+    <!-- Student Info -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-icon" style="background:rgba(99,160,255,0.12)">👤</div>
+        Student information
+      </div>
+      <div class="form-grid">
+        <div class="form-field"><label class="form-label">Student name</label><input type="text" id="student-name" placeholder="e.g. Alex Johnson"></div>
+        <div class="form-field"><label class="form-label">Year / Grade</label><input type="text" id="student-grade" placeholder="e.g. Year 10 / Grade 9"></div>
+        <div class="form-field">
+          <label class="form-label">Subject</label>
+          <select id="subject" required>
+            <option value="">Select subject...</option>
+            <option>Mathematics</option><option>Physics</option><option>Chemistry</option>
+            <option>Biology</option><option>English Language</option><option>English Literature</option>
+            <option>History</option><option>Geography</option><option>Computer Science</option>
+            <option>Economics</option><option>French</option><option>Spanish</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-field"><label class="form-label">Assessment type</label><input type="text" id="exam-type" placeholder="e.g. Mid-term exam, Mock GCSE"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:0">
+        <label class="form-label">Additional context <span style="font-weight:400;text-transform:none;color:var(--text3)">(optional)</span></label>
+        <input type="text" id="extra-context" placeholder="Teacher notes, prior performance, missed lessons, learning difficulties…">
+      </div>
+    </div>
+
+    <!-- Exam Input -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-icon" style="background:rgba(240,165,0,0.12)">📋</div>
+        Exam script / Student responses
+      </div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="mode-image-btn" onclick="switchMode('image')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Upload PDF / Images
+        </button>
+      </div>
+
+      <div id="text-section" style="display:none">
+        <p style="font-size:13px;color:var(--text3);margin-bottom:10px;line-height:1.5">Paste the student's exam including questions, answers, marks, and corrections.</p>
+        <textarea id="script-text" placeholder="Q1. Solve 2x + 5 = 13   [2 marks]&#10;Answer: x = 3  ✓ (2/2)&#10;...paste full exam here"></textarea>
+      </div>
+
+      <div id="image-section">
+        <div class="upload-zone" id="drop-zone">
+          <input type="file" id="img-upload" accept="image/*,application/pdf" multiple onchange="handleFiles(this.files)">
+          <span class="upload-icon">📄</span>
+          <div class="upload-title">Drop PDF or exam images here</div>
+          <div class="upload-sub">Handwritten scripts, printed exams, multi-page PDFs — all supported</div>
+          <div class="fmt-badges">
+            <span class="fmt featured">PDF ✦</span><span class="fmt">JPG</span><span class="fmt">PNG</span><span class="fmt">WEBP</span>
+          </div>
+        </div>
+        <div id="img-previews"></div>
+        <div id="pdf-progress" style="display:none;margin-top:10px;font-size:12px;color:var(--text3);text-align:center"></div>
+      </div>
+
+      <div id="both-section" style="display:none;margin-top:12px">
+        <label class="form-label" style="color:var(--text3)">Additional text notes (optional)</label>
+        <textarea id="both-text" style="min-height:90px" placeholder="Marks breakdown, teacher notes, context not visible in the file..."></textarea>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-primary" onclick="runDiagnostic()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Run full diagnostic
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OTHER PAGES ═══ -->
+<div id="page-analysis"  class="page"><div class="container-wide"><div id="analysis-content"> <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
+<div id="page-report"    class="page"><div class="container">     <div id="report-content">  <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
+<div id="page-plan"      class="page"><div class="container-wide"><div id="plan-content">    <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
+<div id="page-worksheet" class="page"><div class="container">     <div id="worksheet-content"><div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ── THEME ──
+(function() {
+  const saved = localStorage.getItem('diag_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  if (saved === 'dark') {
+    document.getElementById('icon-moon').style.display = 'none';
+    document.getElementById('icon-sun').style.display  = '';
+  }
+})();
+
+function toggleTheme() {
+  const html    = document.documentElement;
+  const isDark  = html.getAttribute('data-theme') === 'dark';
+  const newTheme = isDark ? 'light' : 'dark';
+  html.setAttribute('data-theme', newTheme);
+  localStorage.setItem('diag_theme', newTheme);
+  document.getElementById('icon-moon').style.display = isDark ? '' : 'none';
+  document.getElementById('icon-sun').style.display  = isDark ? 'none' : '';
+}
+
+// ── STATE ──
+let APP = {
+  provider: 'ocrpipeline', inputMode: 'image',
+  images: [], pdfData: null, pdfName: null,
+  studentName:'', grade:'', subject:'', examType:'', script:'', context:'',
+  analysis:null, report:null, plan:null, worksheet:null,
+  completedPages: new Set(['input'])
+};
+
+const CFG_KEY = 'diag_cfg_v5';
+const _saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+// NOTE: 'runpod-api-key' is intentionally NOT in this list.
+// API keys must never be stored in localStorage — they live in the server .env file.
+const _CFG_IDS = [
+  'ollama-url','ollama-vision','ollama-text','ollama-timeout',
+  'ocr-server-url','ocr-ollama-url','ocr-vision-model','ocr-text-model','ocr-timeout'
+];
+_CFG_IDS.forEach(id => {
+  const el = document.getElementById(id);
+  const k  = id.replace(/-/g,'_');
+  if (_saved[k] && el) el.value = _saved[k];
+});
+
+function saveConfig() {
+  const obj = { provider: 'ocrpipeline' };
+  _CFG_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) obj[id.replace(/-/g,'_')] = el.value;
+  });
+  localStorage.setItem(CFG_KEY, JSON.stringify(obj));
+}
+
+// ── PROVIDER (always ocrpipeline) ──
+function switchProvider(p, noSave) {
+  APP.provider = 'ocrpipeline';
+  if (!noSave) saveConfig();
+  updateBadge();
+}
+
+function updateBadge() {
+  document.getElementById('status-label').textContent = 'OCR Pipeline';
+}
+
+function resetStatus(msg) {
+  document.getElementById('status-dot').className = 'status-dot';
+  document.getElementById('conn-dot').className   = 'status-dot';
+  document.getElementById('conn-text').textContent = msg || 'Click "Test connection" to verify your setup';
+}
+
+async function testConnection() {
+  saveConfig();
+  document.getElementById('status-dot').className = 'status-dot checking';
+  document.getElementById('conn-dot').className   = 'status-dot checking';
+  document.getElementById('conn-text').textContent = 'Testing RunPod connection via server…';
+
+  try {
+    // /api/health is a same-origin endpoint — the server holds the RunPod key.
+    const r = await fetch('/api/health', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { action: 'health' } }),
+      signal: AbortSignal.timeout(30000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const out = d.output || d;
+    if (out.status !== 'ok') throw new Error('Endpoint unhealthy: ' + JSON.stringify(out));
+    const ocr    = out.services?.ocr_server || '?';
+    const ollama = out.services?.ollama     || '?';
+    document.getElementById('status-dot').className = 'status-dot ok';
+    document.getElementById('conn-dot').className   = 'status-dot ok';
+    document.getElementById('conn-text').textContent = `✓ Connected — OCR: ${ocr} · Ollama: ${ollama}`;
+  } catch(e) {
+    document.getElementById('status-dot').className = 'status-dot';
+    document.getElementById('conn-dot').className   = 'status-dot';
+    document.getElementById('conn-text').innerHTML  = '✗ ' + e.message;
+  }
+}
+
+function tips() {
+  alert('Setup:\n1. On your server, create a .env file with:\n   RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/YOUR_ID/runsync\n   RUNPOD_API_KEY=your_key_here\n2. Start the proxy server: node server.js\n3. Open this page served from the same origin (e.g. http://localhost:3000)\n4. Click "Test connection" — the server will verify the key without exposing it to the browser.\n\nYour API key is NEVER sent to or stored in the browser.');
+}
+
+// ── INPUT MODE ──
+function switchMode(m) {
+  APP.inputMode = m;
+  ['text','image','both'].forEach(md => {
+    const btn = document.getElementById('mode-' + md + '-btn');
+    if (btn) btn.classList.toggle('active', md === m);
+  });
+  document.getElementById('text-section').style.display  = m === 'text'  ? 'block' : 'none';
+  document.getElementById('image-section').style.display = m !== 'text'  ? 'block' : 'none';
+  document.getElementById('both-section').style.display  = m === 'both'  ? 'block' : 'none';
+}
+
+// ── FILE HANDLING ──
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+
+async function handleFiles(files) {
+  for (const f of files) {
+    if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+      await handlePDF(f);
+    } else if (f.type.startsWith('image/')) {
+      const b64 = await compressImageFile(f, 1400, 0.88);
+      APP.images.push({ base64: b64, mimeType: 'image/jpeg', name: f.name });
+    }
+  }
+  renderPreviews();
+}
+
+async function fileToB64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function compressCanvas(canvas, maxPx, quality) {
+  maxPx = maxPx || 1000; quality = quality || 0.85;
+  let w = canvas.width, h = canvas.height;
+  if (w > maxPx || h > maxPx) {
+    const r = Math.min(maxPx / w, maxPx / h);
+    w = Math.round(w * r); h = Math.round(h * r);
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(canvas, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', quality).split(',')[1];
+}
+
+async function compressImageFile(file, maxPx, quality) {
+  maxPx = maxPx || 1000; quality = quality || 0.85;
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file);
+  });
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        const ratio = Math.min(maxPx / w, maxPx / h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(c.toDataURL('image/jpeg', quality).split(',')[1]);
+    };
+    img.onerror = () => rej(new Error('Failed to load image for compression: ' + file.name));
+    img.src = dataUrl;
+  });
+}
+
+async function handlePDF(file) {
+  const prog = document.getElementById('pdf-progress');
+  prog.style.display = 'block';
+  prog.textContent = 'Loading PDF…';
+
+  APP.pdfData = await fileToB64(file);
+  APP.pdfName = file.name;
+
+  if (typeof pdfjsLib !== 'undefined') {
+    try {
+      const buf  = await file.arrayBuffer();
+      const pdf  = await pdfjsLib.getDocument({ data: buf }).promise;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
+        const page     = await pdf.getPage(p);
+        const viewport = page.getViewport({ scale: 1.8 });
+        const canvas   = document.createElement('canvas');
+        canvas.width   = viewport.width;
+        canvas.height  = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        APP.images.push({
+          base64: compressCanvas(canvas, 1400, 0.88),
+          mimeType: 'image/jpeg',
+          name: `${file.name} — p${p}`
+        });
+      }
+      prog.textContent = `✓ ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} ready (compressed for fast inference)`;
+      setTimeout(() => prog.style.display = 'none', 2500);
+    } catch(e) {
+      prog.textContent = `⚠ PDF.js error: ${e.message} — can still read the raw PDF`;
+    }
+  } else {
+    prog.textContent = '✓ PDF stored';
+    setTimeout(() => prog.style.display = 'none', 2000);
+  }
+}
+
+function removeImg(i) {
+  APP.images.splice(i, 1);
+  if (!APP.images.length) { APP.pdfData = null; APP.pdfName = null; }
+  renderPreviews();
+}
+
+function renderPreviews() {
+  const el = document.getElementById('img-previews');
+  if (!APP.images.length && !APP.pdfData) { el.innerHTML = ''; return; }
+  const badge = APP.pdfName
+    ? `<div style="margin-bottom:8px"><span style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin:2px">📄 ${APP.pdfName}</span></div>`
+    : '';
+  const thumbItems = APP.images.map((img,i) =>
+    '<div class="thumb"><img src="data:' + img.mimeType + ';base64,' + img.base64 + '" alt="p' + (i+1) + '">'
+    + '<button class="thumb-rm" onclick="removeImg(' + i + ')">✕</button>'
+    + '<div class="thumb-lbl">' + (img.name||'Page '+(i+1)) + '</div></div>'
+  ).join('');
+  const thumbs = APP.images.length
+    ? '<div style="margin-top:8px;margin-bottom:4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3)">'
+      + APP.images.length + ' page' + (APP.images.length>1?'s':'') + '</div>'
+      + '<div class="thumb-grid">' + thumbItems + '</div>'
+    : '';
+  el.innerHTML = badge + thumbs;
+}
+
+// ── LOADING ──
+function setLoadingState(pageId, title, sub, current, total) {
+  const el = document.getElementById(pageId + '-content');
+  if (!el) return;
+  const pct  = total > 0 ? Math.round((current / total) * 100) : 0;
+  const dots = total > 0
+    ? Array.from({ length: total }, (_, i) => {
+        const cls = i < current ? 'done' : i === current ? 'active' : '';
+        return '<div class="pp-dot' + (cls ? ' ' + cls : '') + '"></div>';
+      }).join('')
+    : '';
+  const progressHtml = total > 1
+    ? '<div class="page-progress"><div class="pp-label">Page ' + current + ' of ' + total
+      + '</div><div class="pp-bar-wrap"><div class="pp-bar" style="width:' + pct
+      + '%"></div></div><div class="pp-dots">' + dots + '</div></div>'
+    : '';
+  el.innerHTML = '<div class="loading-state">'
+    + '<div class="spinner"></div>'
+    + '<div class="loading-text" id="' + pageId + '-loading-txt">' + title + '</div>'
+    + '<div class="loading-sub"  id="' + pageId + '-loading-sub">' + (sub || '') + '</div>'
+    + progressHtml
+    + '</div>';
+}
+
+function updateLoadingText(pageId, title, sub) {
+  const t = document.getElementById(pageId + '-loading-txt');
+  const s = document.getElementById(pageId + '-loading-sub');
+  if (t && title !== undefined) t.textContent = title;
+  if (s && sub    !== undefined) s.textContent = sub;
+}
+
+// ── API LAYER ──
+async function callAI(prompt, images, pdfData) {
+  return callOCRPipeline(prompt, images);
+}
+
+// ── 1. OCR PIPELINE (via secure server-side proxy — key never touches the browser) ──
+async function callOCRPipeline(prompt, images) {
+  // The API key and RunPod endpoint URL live in the server's .env file.
+  // This function only knows about /api/ai — a same-origin endpoint that holds the secret.
+  const visionModel =  document.getElementById('ocr-vision-model').value || 'qwen2.5vl:7b-q8_0';
+  const textModel   =  document.getElementById('ocr-text-model').value   || 'qwen2.5:7b-instruct-q4_K_M';
+  const timeoutMin  =  parseFloat(document.getElementById('ocr-timeout')?.value || '15');
+
+  // All RunPod calls go through /api/ai — the server attaches the Authorization header.
+  async function runpodCall(input, timeoutMs) {
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input }),
+      signal: AbortSignal.timeout(timeoutMs || 600000)
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error('Server proxy ' + r.status + ': ' + t.slice(0,200)); }
+    const data = await r.json();
+    return data.output || data;
+  }
+
+  // Text-only path — no images
+  if (!images || !images.length) {
+    updateLoadingText('analysis', 'Sending to RunPod — text model…', 'Waiting for response');
+    const out = await runpodCall({
+      action: 'ollama-chat',
+      model: textModel,
+      messages: [
+        { role: 'system', content: 'You are an expert educational diagnostic specialist. CRITICAL GROUNDING RULE: When analysing an exam, you must ONLY report what you actually observe in the provided content. Never invent question numbers, marks, student answers, or topics that are not explicitly present. If something is unclear or illegible, say so — do not guess. When asked to return JSON, return ONLY valid JSON — no markdown fences, no preamble, no trailing commas, no comments. Use double quotes only. Never use single quotes. Never include raw newlines inside string values — use a space instead. Never use backslashes except for valid JSON escape sequences.' },
+        { role: 'user', content: prompt }
+      ],
+      options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
+      timeout_seconds: Math.round(timeoutMin * 60)
+    }, timeoutMin * 60000 + 30000);
+    return out.content || '';
+  }
+
+  // Stage 1 — OCR batch
+  updateLoadingText('analysis', `Stage 1/3 — PaddleOCR + TrOCR on ${images.length} page(s)…`, 'Extracting text + handwriting');
+  let ocrText = '';
+  try {
+    const ocrOut = await runpodCall({
+      action: 'ocr-batch',
+      images: images.map(i => i.base64),
+      refine_threshold: 0.72,
+      timeout_seconds: Math.round(timeoutMin * images.length * 60)
+    }, timeoutMin * images.length * 60000 + 30000);
+
+    if (!ocrOut.success) throw new Error('OCR failed: ' + ocrOut.error);
+    ocrText = ocrOut.combined_text || '';
+    updateLoadingText('analysis', `Stage 2/3 — Vision model interpreting structure…`, `OCR: ${ocrOut.pages?.length||0} pages · ${ocrText.length} chars`);
+  } catch(e) {
+    updateLoadingText('analysis', 'OCR unavailable — using vision model directly…', e.message);
+    // Fallback: skip OCR, go straight to vision model per-page
+    const pageTexts = [];
+    for (let i = 0; i < images.length; i++) {
+      setLoadingState('analysis', `Vision model · page ${i+1}/${images.length}…`, 'No OCR — vision only', i, images.length);
+      const pageOut = await runpodCall({
+        action: 'ollama-chat',
+        model: visionModel,
+        messages: [
+          { role: 'system', content: 'You are an expert educational diagnostic specialist. Extract all content from this exam page accurately.' },
+          { role: 'user', content: `Extract all text, questions, marks and student answers from exam page ${i+1} of ${images.length}.`, images: [images[i].base64] }
+        ],
+        options: { temperature: 0.05, num_predict: 2000, num_ctx: 8192 },
+        timeout_seconds: Math.round(timeoutMin * 60)
+      }, timeoutMin * 60000 + 30000);
+      pageTexts.push(`=== PAGE ${i+1} ===\n${pageOut.content||''}`);
+    }
+    const combined2 = pageTexts.join('\n\n');
+    updateLoadingText('analysis', 'Stage 3/3 — Generating diagnostic…', `Using ${textModel}`);
+    const finalOut = await runpodCall({
+      action: 'ollama-chat',
+      model: textModel,
+      messages: [
+        { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed.' },
+        { role: 'user', content: `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined2}` }
+      ],
+      options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
+      timeout_seconds: Math.round(timeoutMin * 2 * 60)
+    }, timeoutMin * 2 * 60000 + 30000);
+    return finalOut.content || '';
+  }
+
+  // Stage 2 — Vision model per page
+  const pageInterpretations = [];
+  for (let i = 0; i < images.length; i++) {
+    setLoadingState('analysis', `Stage 2/3 — Vision model · page ${i+1}/${images.length}…`, 'Identifying marks, ticks, corrections', i, images.length);
+    const pageOCR    = ocrText.split(/=== PAGE \d+ ===/)[i + 1] || '';
+    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR. Analyse page ${i+1} of ${images.length}.
+${mathOCRRules()}
+Initial OCR text (verify and correct against the image):
+${pageOCR}
+
+STEP 1 — QUESTION INVENTORY: Before writing anything else, scan the entire page and list every question number you can see, including sub-parts (e.g. "Questions visible on this page: Q1a, Q1b, Q2, Q3a, Q3b, Q3c"). Do not skip questions or sub-parts, even if the student left them blank.
+
+STEP 2 — For each question or sub-question from Step 1, produce this exact block:
+Q<number>: [exact question text as printed/written — e.g. Q1a, Q2, Q3b]
+MARKS AVAILABLE: [number shown in brackets e.g. [2 marks] — write the number only]
+STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work]
+MARKS AWARDED: [count ticks for correct marks, crosses for wrong; circled number = marks given; blank = not yet marked. Write the number e.g. "2" or "0" or "unmarked". IMPORTANT: if the teacher has written "0" in a different ink, record 0 — unless the 0 is crossed out/corrected or there is an additive note like (+1), in which case record the corrected value]
+TEACHER NOTE: [corrections or comments in different ink, or "none"]
+CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+
+PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
+
+CRITICAL: Your Step 2 output must contain exactly the same question numbers as your Step 1 inventory — no additions, no omissions.`;
+
+    try {
+      const pageOut = await runpodCall({
+        action: 'ollama-chat',
+        model: visionModel,
+        messages: [
+          { role: 'system', content: 'You are an expert exam marker. Extract all content accurately.' },
+          { role: 'user', content: pagePrompt, images: [images[i].base64] }
+        ],
+        options: { temperature: 0.05, num_predict: 2000, num_ctx: 8192 },
+        timeout_seconds: Math.round(timeoutMin * 60)
+      }, timeoutMin * 60000 + 30000);
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || pageOCR}`);
+    } catch(_) {
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOCR}`);
+    }
+  }
+
+  // Stage 3 — Diagnostic analysis
+  updateLoadingText('analysis', `Stage 3/3 — Generating diagnostic analysis…`, `Using ${textModel}`);
+  const combined   = pageInterpretations.join('\n\n');
+  const fullPrompt = `${prompt}\n\nEXAM CONTENT (PaddleOCR + TrOCR + Vision, ${images.length} pages):\n${combined}`;
+  const finalOut = await runpodCall({
+    action: 'ollama-chat',
+    model: textModel,
+    messages: [
+      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown.' },
+      { role: 'user', content: fullPrompt }
+    ],
+    options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
+    timeout_seconds: Math.round(timeoutMin * 2 * 60)
+  }, timeoutMin * 2 * 60000 + 30000);
+  return finalOut.content || '';
+}
+
+// ── 2. OLLAMA ONLY (internal fallback — also routes via RunPod) ──
+async function callOllama(prompt, images) {
+  return callOCRPipeline(prompt, images);
+}
+
+async function callOllamaMultiPage(prompt, images, ollamaUrl, visionModel, textModel, timeoutMin) {
+  // This path is kept for compatibility but routes through RunPod
+  return callOCRPipeline(prompt, images);
+}
+
+// ── CORE API CALL (proxied — key stays on the server) ──
+async function ollamaStream(url, model, prompt, isVision, imageB64, timeoutMs) {
+  // url/apiKey are ignored here — the server holds both.
+  const systemMsg = 'You are an expert educational diagnostic specialist. CRITICAL GROUNDING RULE: When analysing an exam, you must ONLY report what you actually observe in the provided content. Never invent question numbers, marks, student answers, or topics that are not explicitly present. If something is unclear or illegible, say so — do not guess. When asked to return JSON, return ONLY valid JSON — no markdown fences, no preamble, no trailing commas, no comments. Use double quotes only. Never use single quotes. Never include raw newlines inside string values — use a space instead. Never use backslashes except for valid JSON escape sequences.';
+
+  const userMsg = (isVision && imageB64)
+    ? { role: 'user', content: prompt, images: [imageB64] }
+    : { role: 'user', content: prompt };
+
+  const r = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      input: {
+        action: 'ollama-chat',
+        model,
+        messages: [{ role: 'system', content: systemMsg }, userMsg],
+        options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 8192 },
+        timeout_seconds: Math.round((timeoutMs || 900000) / 1000)
+      }
+    }),
+    signal: AbortSignal.timeout(timeoutMs || 900000)
+  });
+
+  if (!r.ok) { const t = await r.text(); throw new Error('Server proxy ' + r.status + ': ' + t.slice(0,220)); }
+  const data = await r.json();
+  const out  = data.output || data;
+  return out.content || '';
+}
+
+// ── JSON PARSER ──
+function parseJSON(raw) {
+  if (!raw) throw new Error('Empty AI response');
+  let s = raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
+  s = s.replace(/\u201c|\u201d|\u2033|\u02BA/g,'"').replace(/\u2018|\u2019|\u02BC|\u0060/g,"'");
+  const start = s.indexOf('{'), end = s.lastIndexOf('}');
+  if (start !== -1 && end > start) s = s.slice(start, end + 1);
+  try { return JSON.parse(s); } catch (_) {}
+
+  function sanitise(r) {
+    r = r.replace(/^\uFEFF/,'').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'');
+    r = r.replace(/\u201c|\u201d|\u2033|\u02BA/g,'"').replace(/\u2018|\u2019|\u02BC/g,"'");
+    (function fixInnerQuotes(){
+      let out='',inStr=false,i=0;
+      while(i<r.length){
+        const ch=r[i];
+        if(inStr){
+          if(ch==='\\'){out+=ch+(r[i+1]||'');i+=2;continue;}
+          if(ch==='"'){
+            let j=i+1;while(j<r.length&&/\s/.test(r[j]))j++;
+            const next=r[j]||'';
+            if(':,}]'.includes(next)||j>=r.length){out+='"';inStr=false;}
+            else{out+='\\"';}
+            i++;continue;
+          }
+          out+=ch;i++;
+        }else{if(ch==='"'){out+='"';inStr=true;i++;continue;}out+=ch;i++;}
+      }
+      r=out;
+    })();
+    r=r.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g,function(m,inner){
+      return '"'+inner.replace(/²/g,'^2').replace(/³/g,'^3').replace(/⁴/g,'^4')
+        .replace(/√/g,'sqrt').replace(/±/g,'+/-').replace(/×/g,'*')
+        .replace(/÷/g,'/').replace(/π/g,'pi').replace(/≤/g,'<=')
+        .replace(/≥/g,'>=').replace(/≠/g,'!=').replace(/°/g,' degrees')
+        .replace(/…/g,'...').replace(/[^\x00-\x7F]/g,' ')+'"';
+    });
+    r=r.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g,function(m,inner){return '"'+inner.replace(/\\(?!["\\\/bfnrtu])/g,'\\\\')+'"';});
+    r=r.replace(/,\s*([}\]])/g,'$1');
+    r=r.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g,function(m,inner){return '"'+inner.replace(/\r\n/g,' ').replace(/[\r\n]/g,' ').replace(/\t/g,' ')+'"';});
+    r=r.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g,function(m,inner){return '"'+inner.replace(/ {2,}/g,' ')+'"';});
+    return r;
+  }
+
+  function repairTruncated(r) {
+    r=r.replace(/,\s*\{[^}]*$/,'');
+    let opens=0,closes=0; for(const ch of r){if(ch==='[')opens++;if(ch===']')closes++;}
+    let opens2=0,closes2=0; for(const ch of r){if(ch==='{')opens2++;if(ch==='}')closes2++;}
+    r=r.replace(/,?\s*$/,'');
+    for(let i=0;i<opens2-closes2;i++)r+='}';
+    for(let i=0;i<opens-closes;i++)r+=']';
+    return r;
+  }
+
+  const s2=sanitise(s);
+  try{return JSON.parse(s2);}catch(e){
+    const s3=s2.replace(/\\n/g,' ').replace(/\\r/g,' ').replace(/\\t/g,' ');
+    try{return JSON.parse(s3);}catch(e2){
+      try{return JSON.parse(repairTruncated(s3));}catch(_){}
+      try{const m=raw.match(/\{[\s\S]+\}/);if(m)return JSON.parse(repairTruncated(sanitise(m[0])));}catch(_){}
+      throw new Error(`JSON parse failed (${e2?.message}). Try simpler model or use OCR Pipeline for better reliability.`);
+    }
+  }
+}
+
+// ── NORMALIZER ──
+function normalizeAnalysis(d) {
+  d.marksObtained=parseFloat(String(d.marksObtained).replace(/[^\d.]/g,''))||0;
+  d.totalMarks=parseFloat(String(d.totalMarks).replace(/[^\d.]/g,''))||0;
+  if(Array.isArray(d.questions)&&d.questions.length>0){
+    d.questions=d.questions.map(q=>({
+      ...q,
+      number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
+      marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
+      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
+      questionText:q.questionText||'',topic:q.topic||'Unknown'
+    }));
+    const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
+    function _parseQ(num){const m=String(num).match(/^(\d+)([a-zA-Z]*)(?:\(([ivxlcdmIVXLCDM]+)\))?/);return m?[parseInt(m[1]||0),(m[2]||'').toLowerCase(),_romanIdx[(m[3]||'').toLowerCase()]||0]:[0,'',0];}
+    d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2];});
+    const totalAvail=d.questions.reduce((s,q)=>s+q.marksAvailable,0);
+    const totalAwarded=d.questions.reduce((s,q)=>s+q.marksAwarded,0);
+    if(totalAvail>0){d.totalMarks=totalAvail;d.marksObtained=totalAwarded;}
+  }else{d.questions=[];}
+  d.overallScore=d.totalMarks>0?Math.round((d.marksObtained/d.totalMarks)*100):Math.min(100,Math.max(0,parseFloat(String(d.overallScore).replace(/[^\d.]/g,''))||0));
+  const sc=d.overallScore;
+  d.grade=sc>=75?'A1':sc>=70?'A2':sc>=65?'B3':sc>=60?'B4':sc>=55?'C5':sc>=50?'C6':sc>=45?'D7':sc>=40?'E8':'F9';
+  d.topicPerformance=(d.topicPerformance||[]).map(t=>{
+    let score=parseFloat(String(t.score).replace(/[^\d.]/g,''))||0;
+    const avail=parseFloat(String(t.marksAvailable||0).replace(/[^\d.]/g,''));
+    const awarded=parseFloat(String(t.marksAwarded||0).replace(/[^\d.]/g,''));
+    if(avail>0)score=Math.round((awarded/avail)*100);
+    score=Math.min(100,Math.max(0,score));
+    return{...t,score,level:score>=70?'strong':score>=50?'developing':'weak'};
+  });
+  if(d.questions.length>0){
+    const topicMap={};
+    d.questions.forEach(q=>{
+      const t=q.topic||'Unknown';
+      if(!topicMap[t])topicMap[t]={marksAvailable:0,marksAwarded:0,questionsAttempted:0,mistakes:0};
+      topicMap[t].marksAvailable+=q.marksAvailable;topicMap[t].marksAwarded+=q.marksAwarded;
+      if(q.marksAvailable>0)topicMap[t].questionsAttempted++;
+      if(q.marksAwarded<q.marksAvailable)topicMap[t].mistakes++;
+    });
+    const recomputedTopics=Object.entries(topicMap).map(([topic,v])=>{
+      const score=v.marksAvailable>0?Math.round((v.marksAwarded/v.marksAvailable)*100):0;
+      return{topic,score,level:score>=70?'strong':score>=50?'developing':'weak',questionsAttempted:v.questionsAttempted,marksAvailable:v.marksAvailable,marksAwarded:v.marksAwarded,mistakes:v.mistakes};
+    });
+    if(recomputedTopics.length>0)d.topicPerformance=recomputedTopics;
+  }
+  d.keyMistakes=d.keyMistakes||[];d.strengths=d.strengths||[];d.weaknesses=d.weaknesses||[];d.urgentGaps=d.urgentGaps||[];d.performanceSummary=d.performanceSummary||'';
+  return d;
+}
+
+// ── NAV / PAGE ──
+function goPage(p) {
+  if (!APP.completedPages.has(p) && p !== 'input') return;
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-step').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  document.getElementById('navs-' + p).classList.add('active');
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+function navToReport() {
+  if (!APP.completedPages.has('report')) return;
+  if (APP.analysis && !APP.report) { runReport(); } else { goPage('report'); }
+}
+function navToWorksheet() {
+  if (!APP.completedPages.has('worksheet')) return;
+  if (APP.plan && !APP.worksheet) { generateWorksheet(); } else { goPage('worksheet'); }
+}
+function unlockPage(p) {
+  APP.completedPages.add(p);
+  document.getElementById('navs-' + p)?.classList.add('done');
+}
+function errCard(msg) {
+  return `<div class="card"><p style="color:var(--red);font-size:14px;font-weight:600;margin-bottom:6px">Error</p><p style="font-size:13px;color:var(--text2)">${msg}</p><div class="action-row" style="margin-top:12px"><button class="btn btn-sm btn-secondary" onclick="goPage('input')">← Back</button><button class="btn btn-sm" onclick="tips()" style="border-color:var(--bd2)">Setup tips</button></div></div>`;
+}
+
+// ── DEMO ──
+function loadDemo() {
+  document.getElementById('student-name').value  = 'Alex Johnson';
+  document.getElementById('student-grade').value = 'Year 10';
+  document.getElementById('subject').value       = 'Mathematics';
+  document.getElementById('exam-type').value     = 'End of Term Mock Exam';
+  switchMode('text');
+  document.getElementById('script-text').value = `Q1. Solve for x: 3x - 7 = 14 [2 marks]\nAnswer: 3x = 21, x = 7  ✓ (2/2)\n\nQ2. Expand: (2x + 3)(x - 4) [3 marks]\nAnswer: 2x² - 5x - 4  ✗ (1/3) — Correct: 2x² - 5x - 12\n\nQ3. Area of circle radius 6cm [2 marks]\nAnswer: π × 36 = 113.10 cm²  ✓ (2/2)\n\nQ4. Simultaneous: 2x + y = 10 and x - y = 2 [4 marks]\nAnswer: x = 4, y = 2  ✓ (4/4)\n\nQ5. Expand: (x + 4)² [2 marks]\nAnswer: x² + 16  ✗ (0/2) — Correct: x² + 8x + 16\n\nQ6. P(A)=0.3, P(B)=0.5, independent. P(A and B)? [2 marks]\nAnswer: 0.3 + 0.5 = 0.8  ✗ (0/2) — Correct: 0.15\n\nQ7. nth term of 5, 8, 11, 14... [2 marks]\nAnswer: 3n + 2  ✓ (2/2)\n\nQ8. Solve: x² - 7x + 10 = 0 [3 marks]\nAnswer: No attempt (0/3)\n\nTotal: 11/20`;
+  document.getElementById('extra-context').value = 'Strong in linear equations. Missed probability. Struggles with expanding brackets.';
+}
+
+// ── DIAGNOSTIC FLOW ──
+async function runDiagnostic() {
+  saveConfig();
+  const name     = document.getElementById('student-name').value.trim()  || 'Student';
+  const grade    = document.getElementById('student-grade').value.trim();
+  const subject  = document.getElementById('subject').value               || 'the subject';
+  const examType = document.getElementById('exam-type').value.trim();
+  const context  = document.getElementById('extra-context').value.trim();
+  const imgs     = APP.inputMode !== 'text' ? APP.images : [];
+  const pdfData  = null;
+  let script = '';
+  if (APP.inputMode === 'text') script = document.getElementById('script-text').value.trim();
+  else if (APP.inputMode === 'both') script = document.getElementById('both-text').value.trim();
+
+  if (!script && !imgs.length && !pdfData) {
+    alert('Please paste the exam script OR upload at least one image / PDF.');
+    return;
+  }
+  if (!document.getElementById('subject').value) {
+    alert('Please select a subject before running the diagnostic.');
+    document.getElementById('subject').focus();
+    return;
+  }
+
+  APP = { ...APP, studentName:name, grade, subject, examType, script, context,
+          analysis:null, report:null, plan:null, worksheet:null };
+
+  ['analysis','report','plan','worksheet'].forEach(p => {
+    unlockPage(p);
+    document.getElementById(p + '-content').innerHTML =
+      `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Queued…</div></div>`;
+  });
+
+  goPage('analysis');
+  await runAnalysis();
+  await runReport();
+  await runPlan();
+}
+
+// ── SUBJECT HELPERS ──
+function isMath() { return /math/i.test(APP.subject || ''); }
+
+function mathOCRRules() {
+  if (!isMath()) return '';
+  return `
+MATHEMATICS-SPECIFIC OCR RULES — follow exactly:
+- Transcribe all equations and expressions verbatim using ASCII math: x^2, sqrt(), fractions as a/b
+- Fractions written vertically: write as numerator/denominator e.g. 3/4
+- Indices/powers: use ^ notation e.g. x^3, 2^6
+- Square roots: sqrt(...) or ^(1/2)
+- Cube roots: cbrt(...)
+- Multiplication dot or cross: write as *
+- Negative signs in front of numbers: preserve exactly e.g. -5, -2.5
+- Greek letters: write the name e.g. pi, theta, alpha
+- Circled page score at bottom (e.g. circled "4"): write as [PAGE SCORE: 4]
+- Partial marks shown as fractions e.g. 1/2 mark: write as [PARTIAL: 0.5]
+- Method marks (M), Accuracy marks (A), Follow-through marks (ft/FT): note them
+- Working-out lines (even crossed out): transcribe fully — this is critical for diagnosing method errors
+- Box or circle around final answer: note as [FINAL ANSWER: ...]`;
+}
+
+function mathAnalysisRules() {
+  if (!isMath()) return '';
+  return `
+MATHEMATICS DIAGNOSTIC RULES:
+Topic taxonomy — use ONLY these topic names where applicable:
+  Number (factors, multiples, primes, HCF, LCM, powers, roots, ordering)
+  Fractions Decimals Percentages
+  Algebra (expressions, equations, factorising, expanding, sequences)
+  Ratio and Proportion
+  Geometry (angles, polygons, circles, area, volume, transformations)
+  Coordinate Geometry (straight lines, gradients, graphs)
+  Statistics (averages, range, charts, probability)
+  Number Line and Directed Numbers
+
+Mistake classification — identify these specific math error types:
+  "Arithmetic slip" — correct method, wrong calculation
+  "Sign error" — wrong positive/negative
+  "Method error" — fundamentally wrong approach
+  "Incomplete working" — answer without steps shown
+  "Misread question" — answered different question than asked
+  "Unit error" — forgot or wrong units
+  "Conceptual gap" — does not understand underlying concept
+
+Chain-of-thought instruction: Before producing JSON, silently verify:
+  1. Count total marks available across all questions
+  2. Count marks awarded (ticks + partial marks + circled scores)
+  3. Calculate percentage = awarded/total * 100
+  4. Only then produce the JSON`;
+}
+
+function mathChainOfThought() {
+  if (!isMath()) return '';
+  return 'STEP 1 - Before writing JSON, mentally work through:\n'
+    + '- List every question and its total marks available\n'
+    + '- List every question and its marks awarded (count ticks, read circled numbers, note partial marks)\n'
+    + '- Sum both to get totalMarks and marksObtained\n'
+    + '- Identify which math topic each question tests\n'
+    + '- Identify the specific error type for each wrong or partial answer\n'
+    + 'STEP 2 - ';
+}
+
+function mathReasoningSection() { return isMath() ? '## Mathematical Reasoning and Method Analysis\n' : ''; }
+
+function mathReportRules() {
+  if (!isMath()) return '';
+  return 'Mathematics writing rules:\n'
+    + '- Quote specific question numbers and the exact student error e.g. "In Q6, student wrote x^2+16 instead of x^2+8x+16 — the middle term 8x was omitted"\n'
+    + '- Distinguish arithmetic slips (correct method, wrong number) from conceptual gaps (wrong method) — remediation differs\n'
+    + '- For each mistake, state whether it is an isolated slip or a recurring pattern\n'
+    + '- Reference specific topics by name (e.g. "Expanding Double Brackets") not just "algebra"\n'
+    + '- For conceptual gaps, state the prerequisite knowledge that is missing\n';
+}
+
+function mathWorksheetRules() {
+  if (!isMath()) return '';
+  return 'Math question rules:\n'
+    + '- "calculation": single-step numeric, small working space\n'
+    + '- "multi-step": 3+ steps required, include mark breakdown in hint e.g. "M1 for method, A1 for answer"\n'
+    + '- "show-working": student must show all steps — answer alone scores 0\n'
+    + '- "explain-method": student explains WHY a technique works (not just the answer)\n'
+    + '- Hints must name the specific technique e.g. "Factorise first" or "Use the quadratic formula"\n'
+    + '- Difficulty gradient: Q1-Q3 scaffolded (replicate the exact mistake), Q4-Q7 standard exam style, Q8-Q10 challenging\n'
+    + '- At least 2 questions must directly mirror the specific mistake patterns identified\n'
+    + '- Questions must use realistic numbers similar to the actual exam\n';
+}
+
+function mathPlanExtras() {
+  if (!isMath()) return '';
+  return '\nMath-specific resources to reference where relevant:\n'
+    + '- Khan Academy (khanacademy.org) — free topic-by-topic video lessons\n'
+    + '- Corbettmaths (corbettmaths.com) — practice papers, video solutions, 5-a-day\n'
+    + '- DrFrostMaths (drfrostmaths.com) — interactive exam-style practice\n'
+    + '- Past papers from the relevant exam board (Cambridge, Edexcel, AQA etc.)\n'
+    + 'Math daily habits: always show full working, do timed practice not just reading, check answers by substituting back.\n'
+    + 'Math exam tips: method marks are available even for wrong answers, show all steps, underline key information in word problems.\n';
+}
+
+// ── ANALYSIS ──
+async function runAnalysis() {
+  const imgs    = APP.inputMode !== 'text' ? APP.images : [];
+  const pdfData = null;
+  const hasVisual = imgs.length > 0;
+
+  setLoadingState('analysis',
+    `Starting analysis with OCR Pipeline…`,
+    hasVisual ? `${imgs.length} page(s) to process` : 'Text mode',
+    0, imgs.length
+  );
+
+  const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
+  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be OCR'd and provided as text below]` : '';
+
+  const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
+${mathAnalysisRules()}
+Student: ${APP.studentName}, ${APP.grade}
+Subject: ${APP.subject}, Exam: ${APP.examType}
+Context: ${APP.context || 'none'}${textNote}
+
+STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
+1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers. Do not add questions that do not exist. Do not merge sub-questions together.
+2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam (marks in brackets, ticks, crosses, circled numbers). Never estimate or guess marks.
+3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
+4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
+5. TEACHER MARK RULE: if the teacher has written a mark in a different ink and it shows 0 for a question or sub-question, record marksAwarded as 0 (the student's answer is wrong) — UNLESS the 0 has been visibly crossed out and replaced with a higher value, or there is an explicit additive annotation such as "(+1)" next to it.
+
+${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only:
+{"overallScore":0,"totalMarks":0,"marksObtained":0,"grade":"","performanceSummary":"summary here","questions":[{"number":"1","questionText":"brief question text","topic":"Topic Name","marksAvailable":2,"marksAwarded":1},{"number":"1a","questionText":"sub-question a text","topic":"Topic Name","marksAvailable":1,"marksAwarded":0}],"topicPerformance":[{"topic":"Topic Name","score":0,"level":"weak","questionsAttempted":1,"marksAvailable":4,"marksAwarded":1,"mistakes":1}],"keyMistakes":[{"title":"Mistake title","description":"Exactly what the student did wrong, what they should have done, and the likely cause","frequency":"once","topic":"Topic","errorType":"arithmetic slip|sign error|method error|incomplete working|misread question|unit error|conceptual gap"}],"strengths":["strength 1"],"weaknesses":["weakness 1"],"urgentGaps":["gap 1"]}
+
+RULES FOR questions array:
+- number: the question identifier as a STRING — use the exact label from the exam e.g. "1", "2", "3", or with sub-part letter "1a", "1b", "2c" (no spaces, no leading "Q")
+- If question 1 has sub-parts (a), (b), (c), list each as a SEPARATE entry: "1a", "1b", "1c" — do NOT merge them into a single "1" entry
+- If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
+- questionText: a brief (max 12 word) description of what the question asks — taken directly from the exam
+- topic: which curriculum topic this question tests
+- marksAvailable: marks shown in brackets for this specific question or sub-question in the exam
+- marksAwarded: marks the student actually received for this specific question or sub-question (count ticks, read circled scores)
+- TEACHER MARK RULE: if the teacher has written a mark in different ink and it is 0, treat marksAwarded as 0 (the answer is wrong) — UNLESS the 0 has been crossed out and replaced, or there is an explicit additive annotation such as (+1)
+- Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
+
+RULES FOR topicPerformance:
+- score = round(marksAwarded / marksAvailable * 100) — compute from actual marks in the questions array
+- level = weak (score<50) | developing (50-69) | strong (>=70)
+- overallScore = round(sum(marksAwarded) / sum(marksAvailable) * 100)
+- frequency = once | recurring. errorType = one of the 7 types listed.`;
+
+  try {
+    const raw    = await callAI(prompt, hasVisual ? imgs : null, pdfData);
+    APP.analysis = normalizeAnalysis(parseJSON(raw));
+    renderAnalysis(APP.analysis);
+  } catch(e) {
+    document.getElementById('analysis-content').innerHTML = errCard('Analysis failed: ' + e.message);
+  }
+}
+
+function renderAnalysis(d) {
+  const sc     = d.overallScore;
+  const sColor = sc >= 70 ? '#28a870' : sc >= 50 ? '#f0a500' : '#e04c4c';
+  const sClass = sc >= 70 ? 'mv-green' : sc >= 50 ? 'mv-amber' : 'mv-red';
+
+  const topicsHtml = (d.topicPerformance||[]).map(t => {
+    const c    = t.score>=70 ? '#28a870' : t.score>=50 ? '#f0a500' : '#e04c4c';
+    const chip = t.level==='weak' ? '<span class="chip chip-r">Weak</span>' : t.level==='developing' ? '<span class="chip chip-a">Developing</span>' : '<span class="chip chip-g">Strong</span>';
+    return `<div class="topic-row"><span class="topic-name">${t.topic}</span><div class="bar-wrap"><div class="bar" style="width:${t.score}%;background:${c}"></div></div><span class="topic-pct" style="color:${c}">${t.score}%</span>${chip}</div>`;
+  }).join('');
+
+  const mistakesHtml = (d.keyMistakes||[]).map(m => `
+    <div class="mistake-card">
+      <div class="mistake-title">${m.title}${m.frequency==='recurring'?' <span class="chip chip-r" style="margin-left:4px">Recurring</span>':''}</div>
+      <div class="mistake-desc">${m.description}</div>
+      <div style="margin-top:5px">
+        <span class="tag">${m.topic}</span>
+        ${m.errorType ? `<span class="tag" style="background:var(--red-bg);color:var(--red)">${m.errorType}</span>` : ''}
+      </div>
+    </div>`).join('');
+
+  const questionsHtml = (d.questions||[]).length > 0
+    ? `<div class="card" style="overflow:hidden;padding:0">
+        <div style="padding:1.25rem 1.5rem 0.75rem">
+          <div class="card-title"><div class="card-title-icon" style="background:rgba(99,160,255,0.12)">📋</div>Per-question marks (detected from exam)</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="qb-table">
+            <thead><tr>
+              <th>Q</th><th>Description</th><th>Topic</th>
+              <th style="text-align:center">Available</th><th style="text-align:center">Awarded</th><th style="text-align:center">%</th>
+            </tr></thead>
+            <tbody>
+              ${(d.questions||[]).map(q => {
+                const pct = q.marksAvailable > 0 ? Math.round((q.marksAwarded / q.marksAvailable) * 100) : 0;
+                const col = pct >= 70 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
+                return `<tr>
+                  <td style="font-weight:700;color:var(--teal)">Q${q.number}</td>
+                  <td style="font-size:12px;color:var(--text2);max-width:200px">${q.questionText||'–'}</td>
+                  <td><span class="tag" style="font-size:11px">${q.topic||'–'}</span></td>
+                  <td style="text-align:center">${q.marksAvailable}</td>
+                  <td style="text-align:center;font-weight:700;color:${col}">${q.marksAwarded}</td>
+                  <td style="text-align:center;font-size:12px;color:${col}">${pct}%</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : '';
+
+  document.getElementById('analysis-content').innerHTML = `
+    <div class="section-hd">
+      <div><h2>Diagnostic Analysis</h2><p>${APP.studentName} · ${APP.subject} · ${APP.examType||'Assessment'}</p></div>
+      <div class="action-row no-print">
+        <button class="btn btn-sm btn-secondary" onclick="goPage('report')">View report →</button>
+        <button class="btn btn-sm btn-navy"      onclick="generateWorksheet()">Generate worksheet</button>
+      </div>
+    </div>
+    <div class="result-header">
+      <div class="result-header-info">
+        <h3>${APP.studentName}</h3>
+        <p>${APP.grade||''} · ${APP.subject} · ${APP.examType||'Assessment'}</p>
+        <div style="margin-top:10px">${(d.strengths||[]).map(s=>`<span class="tag tag-g">✓ ${s}</span>`).join('')}</div>
+        <div style="margin-top:4px">${(d.weaknesses||[]).map(w=>`<span class="tag tag-r">⚠ ${w}</span>`).join('')}</div>
+      </div>
+      <div class="rhs-score">
+        <div class="big" style="color:${sColor}">${d.overallScore}%</div>
+        <div class="sub">Grade: ${d.grade}</div>
+        <div class="sub">${d.marksObtained}/${d.totalMarks} marks</div>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-label">Overall</div><div class="metric-val ${sClass}">${d.overallScore}%</div></div>
+      <div class="metric-card"><div class="metric-label">Marks</div><div class="metric-val mv-teal">${d.marksObtained}/${d.totalMarks}</div></div>
+      <div class="metric-card"><div class="metric-label">Grade</div><div class="metric-val mv-navy">${d.grade}</div></div>
+      <div class="metric-card"><div class="metric-label">Weak Topics</div><div class="metric-val mv-red">${(()=>{const t=new Set();(d.questions||[]).forEach(q=>{if(q.marksAwarded===0)t.add(q.topic);});return t.size;})()}</div></div>
+    </div>
+    ${questionsHtml}
+    <div class="card">
+      <div class="card-title"><div class="card-title-icon" style="background:var(--green-bg)">📊</div>Topic breakdown</div>
+      ${topicsHtml||'<p style="font-size:13px;color:var(--text3)">No topic data.</p>'}
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="card-title-icon" style="background:var(--red-bg)">⚠️</div>Key mistakes</div>
+      ${mistakesHtml||'<p style="font-size:13px;color:var(--text3)">No significant mistakes found.</p>'}
+    </div>
+    ${(d.urgentGaps||[]).length?`<div class="alert-danger"><div class="alert-title">Priority gaps — address immediately</div>${d.urgentGaps.map(g=>`<div class="alert-item">→ ${g}</div>`).join('')}</div>`:''}
+    <div class="card" style="background:var(--panel);border-color:var(--panel-bd)">
+      <div class="card-title" style="color:var(--panel-sub)">Summary</div>
+      <p style="font-size:14px;color:var(--panel-sub);line-height:1.7">${d.performanceSummary}</p>
+    </div>
+    <div class="action-row no-print">
+      <button class="btn btn-primary"   onclick="generateWorksheet()">Generate practice worksheet</button>
+      <button class="btn btn-secondary" onclick="goPage('plan')">View action plan</button>
+    </div>`;
+}
+
+// ── REPORT ──
+async function runReport() {
+  document.getElementById('report-content').innerHTML =
+    `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Writing diagnostic report…</div></div>`;
+  const d = APP.analysis;
+  if (!d) { document.getElementById('report-content').innerHTML = errCard('Analysis not complete.'); return; }
+
+  const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>t.topic).join(', ')||'none';
+  const mistakes    = (d.keyMistakes||[]).map(m=>m.title).join(', ')||'none';
+  const errorTypes  = (d.keyMistakes||[]).map(m=>m.errorType||'').filter(Boolean);
+  const conceptErrs = (d.keyMistakes||[]).filter(m=>m.errorType==='method error'||m.errorType==='conceptual gap');
+  const carelessErrs= (d.keyMistakes||[]).filter(m=>m.errorType==='arithmetic slip'||m.errorType==='sign error');
+
+  const questionGroundTruth = (d.questions||[]).length > 0
+    ? `GROUND-TRUTH QUESTION LIST (from analysis — do not add, remove, or renumber):\n${d.questions.map(q=>`Q${q.number}: "${q.questionText}" | topic: ${q.topic} | available: ${q.marksAvailable} | awarded: ${q.marksAwarded}`).join('\n')}`
+    : `Score: ${d.marksObtained}/${d.totalMarks}. No per-question breakdown available — use topic data only.`;
+
+  const prompt = `You are an expert ${isMath()?'mathematics teacher':'educational specialist'} writing a personalised diagnostic report.
+Return ONLY valid JSON — no markdown, no preamble, double quotes only, no trailing commas, no apostrophes in string values.
+
+Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}
+Exam: ${APP.examType} — Score: ${d.marksObtained}/${d.totalMarks} = ${d.overallScore}% Grade: ${d.grade}
+Weak topics: ${weakTopics}
+Key mistakes: ${mistakes}
+Error types present: ${errorTypes.join(', ')||'none'}
+Concept error mistakes: ${conceptErrs.map(m=>m.title).join(', ')||'none'}
+Careless mistakes: ${carelessErrs.map(m=>m.title).join(', ')||'none'}
+Strengths: ${(d.strengths||[]).join(', ')||'none'}
+Context: ${APP.context||'none'}
+
+${questionGroundTruth}
+
+INSTRUCTIONS:
+- potentialScore: estimate marks if only careless mistakes are removed (concept gaps remain)
+- potentialGrade: grade for that potential score
+- conceptErrorMarksLost: marks lost from method/conceptual gap errors
+- carelessMistakesMarksLost: marks lost from arithmetic slips and sign errors
+- totalMarksLost: total marks lost = totalMarks - marksObtained
+- biggestWeakTopic: single most important topic to fix
+- questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above — same question identifiers (including sub-parts like Q1a, Q1b), same marks. Do not add extra questions. Do not change question identifiers.
+- For each question: errorType = "correct" | "careless" | "concept" | "no attempt" | "partial"
+- marksLost = marksAvailable - marksAwarded (use the ground-truth values)
+- diagnosis: 1 sentence explaining what the student did right or wrong on that specific question
+- summary: 2-3 sentences, specific and encouraging, NO apostrophes
+- conceptGaps: only for topics where a genuine conceptual misunderstanding was found
+- feedback: 2-3 sentence encouraging closing note, NO apostrophes
+
+${mathReportRules()}
+
+Return this exact JSON structure:
+{"studentOverview":{"student":"${APP.studentName}","level":"${APP.grade}","score":"${d.marksObtained}/${d.totalMarks}","grade":"${d.grade}","potentialScore":"","potentialGrade":""},"diagnosis":{"conceptErrorMarksLost":0,"carelessMistakesMarksLost":0,"totalMarksLost":0,"biggestWeakTopic":""},"summary":"","questionBreakdown":[{"question":"Q1","topic":"","marks":0,"score":"","errorType":"correct","marksLost":0,"diagnosis":""}],"conceptGaps":[{"topic":"","description":""}],"feedback":""}`;
+
+  try {
+    const raw  = await callAI(prompt);
+    APP.report = parseJSON(raw);
+    renderReport(APP.report);
+  } catch(e) {
+    document.getElementById('report-content').innerHTML = errCard('Report failed: ' + e.message);
+  }
+}
+
+function _parseQ(id) {
+  const m = String(id).match(/^(\d+)([a-z]?)(?:\(([ivxlcdm]+)\))?/i);
+  if (!m) return [0,'',0];
+  const romanMap={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10};
+  const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
+  return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
+}
+
+function renderReport(r) {
+  const d  = APP.analysis || {};
+  const sc = d.overallScore || 0;
+  const sColor = sc>=70?'#28a870':sc>=50?'#f0a500':'#e04c4c';
+  const ov = r.studentOverview || {};
+  const dg = r.diagnosis       || {};
+
+  const knownQIds = new Set((d.questions||[]).map(q=>String(q.number)));
+  let qbSource = r.questionBreakdown || [];
+  if (knownQIds.size > 0) {
+    qbSource = qbSource.filter(q => {
+      const id = String(q.question||'').replace(/^Q/i,'').trim();
+      return knownQIds.has(id);
+    });
+    const reportedIds = new Set(qbSource.map(q=>String(q.question||'').replace(/^Q/i,'').trim()));
+    (d.questions||[]).forEach(gq => {
+      if (!reportedIds.has(String(gq.number))) {
+        qbSource.push({
+          question:`Q${gq.number}`,topic:gq.topic||'',marks:gq.marksAvailable,
+          score:`${gq.marksAwarded}/${gq.marksAvailable}`,
+          errorType:gq.marksAwarded>=gq.marksAvailable?'correct':gq.marksAwarded===0?'concept':'partial',
+          marksLost:gq.marksAvailable-gq.marksAwarded,diagnosis:''
+        });
+      }
+    });
+    qbSource.sort((a,b)=>{
+      const idA=String(a.question||'').replace(/^Q/i,'').trim();
+      const idB=String(b.question||'').replace(/^Q/i,'').trim();
+      const pA=_parseQ(idA),pB=_parseQ(idB);
+      return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2];
+    });
+  }
+
+  const qbRows = qbSource.map(q => {
+    const et=q.errorType||'correct';
+    const badge=et==='correct'
+      ?`<span class="qb-badge qb-correct">✓ Correct</span>`
+      :et==='careless'
+      ?`<span class="qb-badge qb-careless">⚡ Careless</span>`
+      :et==='no attempt'
+      ?`<span class="qb-badge" style="background:var(--surface2);color:var(--text3)">— No attempt</span>`
+      :`<span class="qb-badge qb-concept">✗ Concept</span>`;
+    return `<tr>
+      <td style="font-weight:700;color:var(--teal)">${q.question||''}</td>
+      <td>${q.topic||''}</td>
+      <td style="text-align:center">${q.marks||''}</td>
+      <td style="text-align:center;font-weight:600">${q.score||''}</td>
+      <td>${badge}</td>
+      <td style="text-align:center;color:${(q.marksLost||0)>0?'var(--red)':'var(--green)'}"><strong>${(q.marksLost||0)>0?'-'+q.marksLost:'0'}</strong></td>
+      <td style="font-size:12px;color:var(--text2)">${q.diagnosis||''}</td>
+    </tr>`;
+  }).join('');
+
+  const cgHtml = (r.conceptGaps||[]).map(g=>`
+    <div class="concept-gap-item">
+      <div class="concept-gap-topic">${g.topic||''}</div>
+      <div class="concept-gap-desc">${g.description||''}</div>
+    </div>`).join('');
+
+  document.getElementById('report-content').innerHTML = `
+    <div class="section-hd">
+      <div><h2>Diagnostic Report</h2><p>${APP.studentName} · ${APP.subject}</p></div>
+      <div class="action-row no-print">
+        <button class="btn btn-sm btn-secondary" onclick="window.print()">Print / PDF</button>
+        <button class="btn btn-sm btn-navy"      onclick="goPage('plan')">Action plan →</button>
+      </div>
+    </div>
+
+    <div class="report-overview-grid">
+      <div class="overview-block">
+        <div class="report-section-title">Student Overview</div>
+        <div class="overview-row"><span class="overview-label">Student</span><span class="overview-value">${ov.student||APP.studentName}</span></div>
+        <div class="overview-row"><span class="overview-label">Level</span><span class="overview-value">${ov.level||APP.grade||'–'}</span></div>
+        <div class="overview-row"><span class="overview-label">Score</span><span class="overview-value highlight">${ov.score||d.marksObtained+'/'+d.totalMarks} <span style="font-size:12px;color:var(--text3)">(${ov.grade||d.grade})</span></span></div>
+        <div class="overview-row"><span class="overview-label">Potential Score</span><span class="overview-value potential">${ov.potentialScore||'–'}</span></div>
+        <div class="overview-row"><span class="overview-label">Potential Grade</span><span class="overview-value potential">${ov.potentialGrade||'–'}</span></div>
+      </div>
+      <div class="diag-block">
+        <div class="report-section-title" style="color:var(--panel-sub);margin-bottom:.75rem">Diagnosis</div>
+        <div class="diag-row"><span class="diag-label">Concept Error Marks Lost</span><span class="diag-value red">${dg.conceptErrorMarksLost||0}</span></div>
+        <div class="diag-row"><span class="diag-label">Careless Mistakes Marks Lost</span><span class="diag-value amber">${dg.carelessMistakesMarksLost||0}</span></div>
+        <div class="diag-row"><span class="diag-label">Total Marks Lost</span><span class="diag-value red">${dg.totalMarksLost||0}</span></div>
+        <div class="diag-row"><span class="diag-label">Biggest Weak Topic</span><span class="diag-value teal" style="font-size:12px;max-width:55%;text-align:right">${dg.biggestWeakTopic||'–'}</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="report-section-title">Summary</div>
+      <p class="report-body">${r.summary||''}</p>
+    </div>
+
+    <div class="card" style="overflow:hidden;padding:0">
+      <div style="padding:1.25rem 1.5rem .75rem">
+        <div class="report-section-title">Question Breakdown</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="qb-table">
+          <thead><tr>
+            <th>Question</th><th>Topic</th><th style="text-align:center">Marks</th>
+            <th style="text-align:center">Score</th><th>Error</th>
+            <th style="text-align:center">Lost</th><th>Diagnosis</th>
+          </tr></thead>
+          <tbody>${qbRows||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">No question data available</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+
+    ${cgHtml?`<div class="card"><div class="report-section-title">Concept Gaps</div>${cgHtml}</div>`:''}
+
+    <div class="feedback-block">
+      <div class="report-section-title" style="color:var(--panel-sub);margin-bottom:.75rem">Feedback</div>
+      <p class="feedback-text">${r.feedback||''}</p>
+    </div>
+
+    <div class="action-row no-print" style="margin-top:1.25rem">
+      <button class="btn btn-primary"   onclick="generateWorksheet()">Generate worksheet</button>
+      <button class="btn btn-secondary" onclick="goPage('plan')">View action plan</button>
+    </div>`;
+}
+
+// ── PLAN ──
+async function runPlan() {
+  document.getElementById('plan-content').innerHTML =
+    `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Building personalised action plan…</div></div>`;
+  const d = APP.analysis;
+  if (!d) { document.getElementById('plan-content').innerHTML = errCard('Analysis not complete.'); return; }
+
+  const weakTopics = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>t.topic).join(', ')||'none';
+  const devTopics  = (d.topicPerformance||[]).filter(t=>t.level==='developing').map(t=>t.topic).join(', ')||'none';
+  const mistakes   = (d.keyMistakes||[]).map(m=>m.title).join(', ')||'none';
+
+  const prompt = `Create a personalised study action plan. Return ONLY valid JSON.
+
+Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}, current ${d.overallScore}%
+Weak topics: ${weakTopics}
+Developing: ${devTopics}
+Mistakes: ${mistakes}
+
+JSON rules: double quotes only, no trailing commas, no apostrophes in strings, exactly 4 weeks.
+
+{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"Address top weak topic","actions":["Action one here","Action two here","Action three here"],"resources":["Textbook chapter or website"],"milestone":"Measurable goal for week 1"},{"week":2,"title":"Practice Week","focus":"Second weak area","actions":["Action one","Action two"],"resources":["Resource one"],"milestone":"Goal 2"},{"week":3,"title":"Consolidation Week","focus":"Third area","actions":["Action one","Action two"],"resources":["Resource one"],"milestone":"Goal 3"},{"week":4,"title":"Exam Prep Week","focus":"Review and timed practice","actions":["Action one","Action two"],"resources":["Past papers"],"milestone":"Final goal"}],"dailyHabits":["Habit one","Habit two","Habit three"],"examTips":["Tip one","Tip two","Tip three"]}
+
+Tailor all content specifically to ${APP.studentName} and the identified weak areas.
+${mathPlanExtras()}`;
+
+  try {
+    const raw = await callAI(prompt);
+    APP.plan  = parseJSON(raw);
+    renderPlan(APP.plan);
+  } catch(e) {
+    document.getElementById('plan-content').innerHTML = errCard(e.message);
+  }
+}
+
+function renderPlan(p) {
+  const steps = (p.steps||[]).map(s=>`
+    <div class="step-item">
+      <div class="step-badge">W${s.week}</div>
+      <div class="step-body">
+        <div class="step-title">${s.title}</div>
+        <div class="step-desc"><strong>Focus:</strong> ${s.focus}</div>
+        ${(s.actions||[]).map(a=>`<div style="font-size:13px;color:var(--text2);padding:2px 0">→ ${a}</div>`).join('')}
+        ${(s.resources||[]).length?`<div style="margin-top:6px">${s.resources.map(r=>`<span class="tag">📄 ${r}</span>`).join('')}</div>`:''}
+        <div class="milestone">🎯 ${s.milestone}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('plan-content').innerHTML = `
+    <div class="section-hd">
+      <div><h2>Action Plan</h2><p>${APP.studentName} · ${p.timeframe}</p></div>
+      <button class="btn btn-sm btn-navy no-print" onclick="generateWorksheet()">Generate worksheet →</button>
+    </div>
+    <div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="metric-card"><div class="metric-label">Current</div><div class="metric-val mv-navy">${(APP.analysis||{}).overallScore||'–'}%</div></div>
+      <div class="metric-card"><div class="metric-label">Target</div><div class="metric-val mv-green">${p.targetScore||'–'}%</div></div>
+      <div class="metric-card"><div class="metric-label">Timeframe</div><div class="metric-val mv-teal" style="font-size:18px">${p.timeframe||'–'}</div></div>
+    </div>
+    <div class="card"><div class="card-title"><div class="card-title-icon" style="background:rgba(99,160,255,0.12)">📅</div>Week-by-week plan</div>${steps}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
+      <div class="card"><div class="card-title"><div class="card-title-icon" style="background:var(--green-bg)">✅</div>Daily habits</div>${(p.dailyHabits||[]).map(h=>`<div style="font-size:13px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--bd)">✓ ${h}</div>`).join('')}</div>
+      <div class="card"><div class="card-title"><div class="card-title-icon" style="background:var(--amber-bg)">💡</div>Exam tips</div>${(p.examTips||[]).map(t=>`<div style="font-size:13px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--bd)">💡 ${t}</div>`).join('')}</div>
+    </div>
+    <div class="action-row no-print">
+      <button class="btn btn-primary"   onclick="generateWorksheet()">Generate practice worksheet</button>
+      <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+    </div>`;
+}
+
+// ── WORKSHEET ──
+async function generateWorksheet() {
+  goPage('worksheet');
+  if (APP.worksheet) { renderWorksheet(APP.worksheet); return; }
+  document.getElementById('worksheet-content').innerHTML =
+    `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Generating targeted practice worksheet…</div></div>`;
+
+  const d = APP.analysis || {};
+  const weak     = (d.topicPerformance||[]).filter(t=>t.level!=='strong').map(t=>t.topic).slice(0,4).join(', ') || APP.subject + ' fundamentals';
+  const mistakes = (d.keyMistakes||[]).map(m=>m.title).join(', ') || 'general practice';
+
+  const prompt = `Create a targeted practice worksheet. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not ², sqrt() not √, +/- not ±, pi not π).
+
+Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}
+Target weak topics: ${weak}
+Mistakes to address: ${mistakes}
+
+Field rules:
+- number: integer 1-10
+- type: one of: calculation, multi-step, show-working, multiple-choice, short-answer, explain-method
+- marks: integer 1, 2, or 3
+- options: exactly 4 short strings for multiple-choice, empty array [] for all other types
+- correctAnswer: short plain-text answer only — no multi-line, no math symbols, ASCII only
+- hint: one short sentence, ASCII only, no apostrophes
+${mathWorksheetRules()}
+
+Use this exact JSON shape (replace placeholder values, keep all field names):
+{"title":"Title here","focusTopics":["Topic 1","Topic 2"],"difficulty":"Targeted remediation","estimatedTime":"40 minutes","questions":[{"number":1,"type":"short-answer","topic":"Topic Name","question":"Question text here","marks":1,"hint":"Hint here","options":[],"correctAnswer":"answer here"},{"number":2,"type":"multiple-choice","topic":"Topic Name","question":"Question text here","marks":1,"hint":"","options":["Option A","Option B","Option C","Option D"],"correctAnswer":"A"},{"number":3,"type":"calculation","topic":"Topic Name","question":"Question text","marks":2,"hint":"Show all working","options":[],"correctAnswer":"answer"},{"number":4,"type":"show-working","topic":"Topic Name","question":"Question text","marks":2,"hint":"Show all steps","options":[],"correctAnswer":"answer"},{"number":5,"type":"multi-step","topic":"Topic Name","question":"Question text","marks":3,"hint":"Break into steps","options":[],"correctAnswer":"answer"},{"number":6,"type":"multiple-choice","topic":"Topic Name","question":"Question text","marks":1,"hint":"","options":["A","B","C","D"],"correctAnswer":"B"},{"number":7,"type":"calculation","topic":"Topic Name","question":"Question text","marks":2,"hint":"","options":[],"correctAnswer":"answer"},{"number":8,"type":"multi-step","topic":"Topic Name","question":"Question text","marks":3,"hint":"","options":[],"correctAnswer":"answer"},{"number":9,"type":"explain-method","topic":"Topic Name","question":"Explain why...","marks":2,"hint":"Full sentences","options":[],"correctAnswer":"key idea here"},{"number":10,"type":"show-working","topic":"Topic Name","question":"Question text","marks":3,"hint":"Every step","options":[],"correctAnswer":"answer"}]}
+
+Replace ALL 10 placeholder questions with real exam-style questions targeting ${APP.studentName}'s weak areas.`;
+
+  try {
+    const raw     = await callAI(prompt);
+    APP.worksheet = parseJSON(raw);
+    renderWorksheet(APP.worksheet);
+  } catch(e) {
+    document.getElementById('worksheet-content').innerHTML = errCard(e.message);
+  }
+}
+
+let WS_ANSWERS = {};
+let WS_RESULTS = null;
+
+function renderWorksheet(w) {
+  WS_ANSWERS = {};
+  WS_RESULTS = null;
+  const total = (w.questions||[]).reduce((s,q)=>s+(parseInt(q.marks)||0),0);
+
+  const qs = (w.questions||[]).map(q => {
+    const isMultiChoice = (q.options||[]).length > 0;
+    const needsWorking  = ['calculation','multi-step','show-working'].includes(q.type);
+    const isExplain     = (q.type==='explanation'||q.type==='explain-method');
+
+    const opts = isMultiChoice
+      ? `<div style="margin-top:8px">${q.options.map((o,i)=>`<div style="font-size:13px;color:var(--text2);padding:3px 0">${String.fromCharCode(65+i)}. ${o}</div>`).join('')}</div>`
+      : '';
+
+    let ansHtml = '';
+    if (needsWorking) {
+      ansHtml = `<div class="ws-answer">
+        <label class="ws-field-label">Working space:</label>
+        <textarea class="ws-textarea working" id="ws-work-${q.number}" placeholder="Show your working here…" oninput="wsUpdate(${q.number})"></textarea>
+        <label class="ws-field-label" style="margin-top:10px">Final answer:</label>
+        <textarea class="ws-textarea final" id="ws-final-${q.number}" placeholder="Write your final answer here…" oninput="wsUpdate(${q.number})"></textarea>
+      </div>`;
+    } else if (isExplain) {
+      ansHtml = `<div class="ws-answer">
+        <label class="ws-field-label">Explanation:</label>
+        <textarea class="ws-textarea explanation" id="ws-final-${q.number}" placeholder="Write your explanation here…" oninput="wsUpdate(${q.number})"></textarea>
+      </div>`;
+    } else if (isMultiChoice) {
+      ansHtml = `<div class="ws-answer">
+        <label class="ws-field-label">Your answer (write A, B, C or D):</label>
+        <textarea class="ws-textarea mc-answer" id="ws-final-${q.number}" placeholder="e.g. A" oninput="wsUpdate(${q.number})"></textarea>
+      </div>`;
+    } else {
+      ansHtml = `<div class="ws-answer">
+        <label class="ws-field-label">Answer:</label>
+        <textarea class="ws-textarea final" id="ws-final-${q.number}" placeholder="Write your answer here…" oninput="wsUpdate(${q.number})"></textarea>
+      </div>`;
+    }
+
+    return `<div class="ws-q" id="wsq-${q.number}">
+      <div class="ws-q-header">
+        <div class="ws-q-num">${q.number}</div>
+        <div style="flex:1">
+          <div style="font-size:14px;color:var(--text);line-height:1.65">${q.question}</div>
+          ${opts}
+          <div class="ws-meta">
+            <span class="ws-topic">${q.topic}</span>
+            <span class="ws-marks">[${q.marks} mark${parseInt(q.marks)!==1?'s':''}]</span>
+          </div>
+          ${q.hint?`<div class="ws-hint">💬 ${q.hint}</div>`:''}
+        </div>
+      </div>
+      ${ansHtml}
+      <div id="ws-feedback-${q.number}"></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('worksheet-content').innerHTML = `
+    <div class="section-hd no-print">
+      <div><h2>Practice Worksheet</h2><p>${APP.studentName} · ${APP.subject}</p></div>
+      <div class="action-row">
+        <button class="btn btn-sm btn-secondary" onclick="WS_RESULTS=null;APP.worksheet=null;generateWorksheet()">Regenerate</button>
+        <button class="btn btn-sm btn-navy"      onclick="window.print()">Print</button>
+      </div>
+    </div>
+    <div class="card" style="background:var(--panel);border-color:var(--panel-bd)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--panel-txt);margin-bottom:4px;letter-spacing:-.01em">${w.title}</div>
+          <div style="font-size:12px;color:var(--panel-sub);margin-bottom:8px">${APP.studentName} · ${APP.subject} · ${w.difficulty}</div>
+          <div>${(w.focusTopics||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--teal)">${total} marks</div>
+          <div style="font-size:12px;color:var(--panel-sub)">~${w.estimatedTime}</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem;padding:12px 16px;background:var(--surface2);border-radius:var(--r);font-size:13px;color:var(--text2)">
+      <div>Name: _________________________</div><div>Date: _______________</div><div>Score: _____/${total}</div>
+    </div>
+    ${qs}
+    <div class="ws-submit-area" id="ws-submit-area">
+      <div class="ws-submit-count" id="ws-submit-count">Answer all ${(w.questions||[]).length} questions to submit for marking</div>
+      <button class="btn btn-primary" id="ws-check-btn" onclick="checkWorksheetAnswers()" disabled style="opacity:0.45">
+        ✓ Check my answers
+      </button>
+    </div>
+    <div id="ws-result-area"></div>
+    <div style="margin-top:1.5rem;padding:14px 16px;background:var(--surface2);border-radius:var(--r);font-size:12px;color:var(--text3);text-align:center">
+      End of worksheet · ${APP.studentName} · ${APP.subject} · Student Diagnostic System
+    </div>`;
+}
+
+function wsUpdate(qNum) {
+  const finalEl  = document.getElementById('ws-final-' + qNum);
+  const workEl   = document.getElementById('ws-work-'  + qNum);
+  const finalVal = (finalEl ? finalEl.value.trim() : '');
+  const workingVal=(workEl  ? workEl.value.trim()  : '');
+  if (finalVal) finalEl.classList.add('answered');
+  else          finalEl?.classList.remove('answered');
+  WS_ANSWERS[qNum] = { working: workingVal, final: finalVal };
+  updateSubmitButton();
+}
+
+function updateSubmitButton() {
+  const qs    = (APP.worksheet&&APP.worksheet.questions)||[];
+  const total = qs.length;
+  const done  = qs.filter(q => {
+    const a = WS_ANSWERS[q.number];
+    return a && a.final && a.final.trim().length > 0;
+  }).length;
+  const btn  = document.getElementById('ws-check-btn');
+  const area = document.getElementById('ws-submit-area');
+  const count= document.getElementById('ws-submit-count');
+  if (!btn) return;
+  if (done >= total) {
+    btn.disabled=false; btn.style.opacity='1';
+    area.classList.add('ready');
+    count.textContent='All '+total+' questions answered — ready to submit!';
+    count.style.color='var(--teal-dim)';count.style.fontWeight='600';
+  } else {
+    btn.disabled=true; btn.style.opacity='0.45';
+    area.classList.remove('ready');
+    count.textContent=done+' of '+total+' questions answered';
+    count.style.color='var(--text3)';count.style.fontWeight='400';
+  }
+}
+
+async function checkWorksheetAnswers() {
+  const w   = APP.worksheet;
+  const qs  = (w&&w.questions)||[];
+  const btn = document.getElementById('ws-check-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Checking…'; btn.style.opacity='0.7'; }
+
+  document.getElementById('ws-result-area').innerHTML =
+    `<div class="ws-checking"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div>AI is marking your answers…</div>`;
+
+  function cleanAns(s) {
+    return (s||'').replace(/"/g,"'").replace(/[^\x20-\x7E\n]/g,' ').replace(/\s+/g,' ').trim().slice(0,300);
+  }
+
+  const answersText = qs.map(q => {
+    const a = WS_ANSWERS[q.number] || {};
+    return `Q${q.number} [${q.topic}, ${q.marks} mark${q.marks!==1?'s':''}]:\n  Question: ${q.question}\n  ${(q.options||[]).length?'Options: '+q.options.map((o,i)=>String.fromCharCode(65+i)+'. '+o).join(' | '):'' }\n  Student working: ${cleanAns(a.working)||'(none)'}\n  Student final answer: ${cleanAns(a.final)||'(blank)'}\n  Correct answer: ${q.correctAnswer||''}`;
+  }).join('\n\n');
+
+  const totalMarks = qs.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
+
+  const prompt = `You are an expert ${isMath()?'mathematics':'educational'} marker. Mark this student worksheet.
+Return ONLY a single valid JSON object. No markdown. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not ², sqrt() not √).
+
+Student: ${APP.studentName}, ${APP.subject}
+Total available: ${totalMarks} marks
+
+STUDENT ANSWERS:
+${answersText}
+
+Award marks fairly. Give partial credit when method is correct even if final answer is wrong.
+
+Return this exact JSON shape:
+{"totalAwarded":0,"totalAvailable":${totalMarks},"percentage":0,"grade":"","results":[{"question":1,"marksAwarded":0,"marksAvailable":1,"correct":false,"feedback":"one sentence feedback","correctAnswer":"short answer only","explanation":"brief explanation, ASCII only"}]}
+
+Rules:
+- Include one result object per question, in order
+- correct: true only if full marks awarded
+- feedback: 1 short sentence, no apostrophes, ASCII only
+- correctAnswer: short, ASCII only — omit (empty string) if correct=true
+- explanation: 1-2 sentences max, ASCII only — omit (empty string) if correct=true
+- percentage: round(totalAwarded/totalAvailable*100)
+- grade: A1>=75, A2>=70, B3>=65, B4>=60, C5>=55, C6>=50, D7>=45, E8>=40, else F9`;
+
+  try {
+    const raw  = await callAI(prompt);
+    WS_RESULTS = parseJSON(raw);
+    renderWorksheetResults(WS_RESULTS, qs);
+  } catch(e) {
+    document.getElementById('ws-result-area').innerHTML =
+      `<div style="color:var(--red);font-size:13px;padding:1rem">Marking failed: ${e.message}</div>`;
+    if (btn) { btn.disabled=false; btn.textContent='✓ Check my answers'; btn.style.opacity='1'; }
+  }
+}
+
+function renderWorksheetResults(res, qs) {
+  (res.results||[]).forEach(r => {
+    const el = document.getElementById('ws-feedback-'+r.question);
+    if (!el) return;
+    const isCorrect = r.correct || (r.marksAwarded >= r.marksAvailable);
+    if (isCorrect) {
+      el.innerHTML = `<div class="ws-feedback ws-feedback-correct">
+        <div class="ws-feedback-label correct">✓ Correct — ${r.marksAwarded}/${r.marksAvailable} mark${r.marksAvailable!==1?'s':''}</div>
+        <div class="ws-feedback-body">${r.feedback||'Well done!'}</div>
+      </div>`;
+    } else if (r.marksAwarded > 0) {
+      el.innerHTML = `<div class="ws-feedback ws-feedback-wrong">
+        <div class="ws-feedback-label wrong">⚡ Partial — ${r.marksAwarded}/${r.marksAvailable} mark${r.marksAvailable!==1?'s':''}</div>
+        <div class="ws-feedback-body">${r.feedback||''}</div>
+        ${r.correctAnswer?`<div class="ws-feedback-answer">Model answer: ${r.correctAnswer}</div>`:''}
+        ${r.explanation?`<div class="ws-feedback-body" style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(224,76,76,0.2)">${r.explanation}</div>`:''}
+      </div>`;
+    } else {
+      el.innerHTML = `<div class="ws-feedback ws-feedback-wrong">
+        <div class="ws-feedback-label wrong">✗ Incorrect — 0/${r.marksAvailable} mark${r.marksAvailable!==1?'s':''}</div>
+        <div class="ws-feedback-body">${r.feedback||''}</div>
+        ${r.correctAnswer?`<div class="ws-feedback-answer">Correct answer: ${r.correctAnswer}</div>`:''}
+        ${r.explanation?`<div class="ws-feedback-body" style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(224,76,76,0.2)">${r.explanation}</div>`:''}
+      </div>`;
+    }
+  });
+
+  const pct = res.percentage || (res.totalAvailable>0?Math.round(res.totalAwarded/res.totalAvailable*100):0);
+  const sColor = pct>=70?'#28a870':pct>=50?'#f0a500':'#e04c4c';
+  const correct = (res.results||[]).filter(r=>r.correct||(r.marksAwarded>=r.marksAvailable)).length;
+
+  document.getElementById('ws-result-area').innerHTML = `
+    <div class="ws-result-header">
+      <div>
+        <div style="font-family:'DM Serif Display',serif;font-size:16px;color:var(--panel-txt);margin-bottom:3px;letter-spacing:-.01em">Worksheet Results</div>
+        <div style="font-size:13px;color:var(--panel-sub)">${APP.studentName} · ${correct} of ${qs.length} fully correct</div>
+      </div>
+      <div style="text-align:right">
+        <div class="ws-result-score" style="color:${sColor}">${pct}%</div>
+        <div class="ws-result-sub">${res.totalAwarded}/${res.totalAvailable} marks · Grade ${res.grade||'–'}</div>
+      </div>
+    </div>`;
+
+  const firstWrong = (res.results||[]).find(r=>!r.correct&&r.marksAwarded<r.marksAvailable);
+  if (firstWrong) {
+    const el = document.getElementById('wsq-'+firstWrong.question);
+    if (el) setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'center'}),400);
+  }
+
+  const btn = document.getElementById('ws-check-btn');
+  if (btn) { btn.textContent='✓ Re-check answers'; btn.disabled=false; btn.style.opacity='1'; }
+}
+
+// ── INIT ──
+updateBadge();
+switchMode('image');
+</script>
+</body>
+</html>
