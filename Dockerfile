@@ -22,12 +22,19 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # ── System packages ──────────────────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
-# ── Install Ollama (no script, direct binary) ─────────────────────
-RUN apt-get update && apt-get install -y curl ca-certificates && \
-    curl -L https://ollama.ai/download/ollama-linux-amd64 -o /usr/local/bin/ollama && \
+# ── System packages ─────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    curl \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# ── Install Ollama (binary) ─────────────────────────────────────
+RUN curl -L https://ollama.ai/download/ollama-linux-amd64 -o /usr/local/bin/ollama && \
     chmod +x /usr/local/bin/ollama
 
-# ── Install Python dependencies ──────────────────────────────────────────────
+# ── Install Python dependencies ─────────────────────────────────
 RUN pip3 install --no-cache-dir runpod requests
 
 # ── Pre-bake models into the image ──────────────────────────────────────────
