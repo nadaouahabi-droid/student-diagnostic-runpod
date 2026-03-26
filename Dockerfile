@@ -27,11 +27,12 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     curl \
-    ca-certificates && \
+    ca-certificates \
+    zstd && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Install Ollama (binary) ─────────────────────────────────────
-RUN curl -L https://ollama.ai/download/ollama-linux-amd64 -o /usr/local/bin/ollama && \
+RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 \
+    -o /usr/local/bin/ollama && \
     chmod +x /usr/local/bin/ollama
 
 # ── Install Python dependencies ─────────────────────────────────
