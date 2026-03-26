@@ -56,7 +56,7 @@ def start_ollama():
 
 
 # ── Ollama chat helper ──────────────────────────────────────────────────────
-def ollama_chat(model, messages, options=None, timeout=900):
+def ollama_chat(model, messages, options=None, timeout=120):
     """
     Call Ollama /api/chat.
     messages format: [{ role, content, images?: [base64_str] }]
