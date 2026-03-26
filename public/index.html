@@ -657,40 +657,9 @@ async function callOCRPipeline(prompt, images) {
       `${ocrOut.pages?.length || 0} page${(ocrOut.pages?.length||0)!==1?'s':''} processed`
     );
   } catch(_e) {
-    // OCR service unavailable — fall back silently to vision-model-per-page
-    updateLoadingText('analysis', 'Processing pages…', 'Analysing with vision model');
-    const pageTexts = [];
-    for (let i = 0; i < images.length; i++) {
-      setLoadingState('analysis',
-        `Processing page ${i + 1} of ${images.length}…`,
-        'Identifying marks, ticks and corrections',
-        i, images.length
-      );
-      const pageOut = await runpodCall({
-        action: 'ollama-chat',
-        model: visionModel,
-        messages: [
-          { role: 'system', content: 'You are an expert educational diagnostic specialist. Extract all content from this exam page accurately.' },
-          { role: 'user', content: `Extract all text, questions, marks and student answers from exam page ${i+1} of ${images.length}.`, images: [images[i].base64] }
-        ],
-        options: { temperature: 0.05, num_predict: 2000, num_ctx: 8192 },
-        timeout_seconds: Math.round(timeoutMin * 60)
-      }, timeoutMin * 60000 + 30000);
-      pageTexts.push(`=== PAGE ${i+1} ===\n${pageOut.content||''}`);
-    }
-    const combined2 = pageTexts.join('\n\n');
-    updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
-    const finalOut = await runpodCall({
-      action: 'ollama-chat',
-      model: textModel,
-      messages: [
-        { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed.' },
-        { role: 'user', content: `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined2}` }
-      ],
-      options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
-      timeout_seconds: Math.round(timeoutMin * 2 * 60)
-    }, timeoutMin * 2 * 60000 + 30000);
-    return finalOut.content || '';
+    // OCR service unavailable — continue with empty ocrText so Stage 2 still runs the full vision pipeline
+    ocrText = '';
+    updateLoadingText('analysis', 'Processing pages with vision model…', 'OCR service unavailable, using vision fallback');
   }
 
   // Stage 2 — Vision model per page
@@ -1428,30 +1397,75 @@ async function runPlan() {
   const d = APP.analysis;
   if (!d) { document.getElementById('plan-content').innerHTML = errCard('Analysis not complete.'); return; }
 
-  const weakTopics = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>t.topic).join(', ')||'none';
-  const devTopics  = (d.topicPerformance||[]).filter(t=>t.level==='developing').map(t=>t.topic).join(', ')||'none';
-  const mistakes   = (d.keyMistakes||[]).map(m=>m.title).join(', ')||'none';
+  // Sanitize all embedded strings to prevent apostrophes and special chars breaking JSON
+  function safeStr(s) { return (s||'').replace(/'/g,'').replace(/"/g,'').replace(/[^\x20-\x7E]/g,' ').trim(); }
 
-  const prompt = `Create a personalised study action plan. Return ONLY valid JSON.
+  const studentName = safeStr(APP.studentName);
+  const grade       = safeStr(APP.grade);
+  const subject     = safeStr(APP.subject);
+  const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>safeStr(t.topic)).join(', ')||'none';
+  const devTopics   = (d.topicPerformance||[]).filter(t=>t.level==='developing').map(t=>safeStr(t.topic)).join(', ')||'none';
+  const mistakes    = (d.keyMistakes||[]).map(m=>safeStr(m.title)).join(', ')||'none';
 
-Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}, current ${d.overallScore}%
+  const prompt = `Create a personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes anywhere. Keep every string value under 80 characters. No newlines inside strings.
+
+Student: ${studentName}, ${grade}, ${subject}, current score: ${d.overallScore}%
 Weak topics: ${weakTopics}
-Developing: ${devTopics}
+Developing topics: ${devTopics}
 Mistakes: ${mistakes}
 
-JSON rules: double quotes only, no trailing commas, no apostrophes in strings, exactly 4 weeks.
+STRICT JSON RULES:
+- No apostrophes (use "do not" not "don't", "it is" not "it's")
+- No special characters or symbols
+- All string values under 80 characters
+- Exactly 4 week steps, exactly 3 actions per step, exactly 1 resource per step
+- dailyHabits: exactly 3 items
+- examTips: exactly 3 items
 
-{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"Address top weak topic","actions":["Action one here","Action two here","Action three here"],"resources":["Textbook chapter or website"],"milestone":"Measurable goal for week 1"},{"week":2,"title":"Practice Week","focus":"Second weak area","actions":["Action one","Action two"],"resources":["Resource one"],"milestone":"Goal 2"},{"week":3,"title":"Consolidation Week","focus":"Third area","actions":["Action one","Action two"],"resources":["Resource one"],"milestone":"Goal 3"},{"week":4,"title":"Exam Prep Week","focus":"Review and timed practice","actions":["Action one","Action two"],"resources":["Past papers"],"milestone":"Final goal"}],"dailyHabits":["Habit one","Habit two","Habit three"],"examTips":["Tip one","Tip two","Tip three"]}
+Return this exact structure with real content replacing placeholders:
+{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"Top weak topic name here","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Measurable week 1 goal"},{"week":2,"title":"Practice Week","focus":"Second weak topic","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Week 2 goal"},{"week":3,"title":"Consolidation Week","focus":"Third area","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Week 3 goal"},{"week":4,"title":"Exam Prep Week","focus":"Review and timed practice","actions":["Action one","Action two","Action three"],"resources":["Past papers"],"milestone":"Final readiness goal"}],"dailyHabits":["Habit one","Habit two","Habit three"],"examTips":["Tip one","Tip two","Tip three"]}
 
-Tailor all content specifically to ${APP.studentName} and the identified weak areas.
 ${mathPlanExtras()}`;
 
+  async function planCall(p) {
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: {
+        action: 'ollama-chat',
+        model: DEFAULT_TEXT_MODEL,
+        messages: [
+          { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters.' },
+          { role: 'user', content: p }
+        ],
+        options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192 },
+        timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
+      }}),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MIN * 60000 + 30000)
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error('Server ' + r.status + ': ' + t.slice(0,200)); }
+    const data = await r.json();
+    return (data.output || data).content || '';
+  }
+
   try {
-    const raw = await callAI(prompt);
+    const raw = await planCall(prompt);
     APP.plan  = parseJSON(raw);
     renderPlan(APP.plan);
   } catch(e) {
-    document.getElementById('plan-content').innerHTML = errCard(e.message);
+    // Retry with a simpler, shorter prompt
+    try {
+      document.getElementById('plan-content').innerHTML =
+        `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Retrying with simpler plan…</div></div>`;
+      const simplePrompt = `Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only.
+Action plan for ${studentName} studying ${subject}. Weak areas: ${weakTopics||subject}.
+{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation","focus":"${(weakTopics.split(',')[0]||subject).trim().slice(0,40)}","actions":["Review core concepts","Practice 10 questions","Check answers carefully"],"resources":["Textbook chapter 1"],"milestone":"Complete topic review"},{"week":2,"title":"Practice","focus":"${(weakTopics.split(',')[1]||weakTopics.split(',')[0]||subject).trim().slice(0,40)}","actions":["Do past exam questions","Identify error patterns","Redo incorrect questions"],"resources":["Past papers"],"milestone":"Score 60 percent on practice"},{"week":3,"title":"Consolidation","focus":"Mixed topics","actions":["Timed practice sessions","Review all mistakes","Focus on weak points"],"resources":["Revision guide"],"milestone":"Score 70 percent on mock"},{"week":4,"title":"Exam Prep","focus":"Final review","actions":["Full timed mock exam","Review mark scheme","Rest and prepare"],"resources":["Exam board past papers"],"milestone":"Feel confident for exam"}],"dailyHabits":["Study for 30 minutes each day","Write out key formulas","Review yesterday work"],"examTips":["Show all working for method marks","Read each question twice","Check answers before submitting"]}`;
+      const raw2 = await planCall(simplePrompt);
+      APP.plan = parseJSON(raw2);
+      renderPlan(APP.plan);
+    } catch(e2) {
+      document.getElementById('plan-content').innerHTML = errCard('Plan generation failed: ' + e2.message);
+    }
   }
 }
 
