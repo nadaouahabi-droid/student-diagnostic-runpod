@@ -1,0 +1,18 @@
+# === SECRETS — NEVER COMMIT THESE ===
+.env
+*.env
+.env.local
+.env.production
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
