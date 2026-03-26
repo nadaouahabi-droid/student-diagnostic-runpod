@@ -49,7 +49,7 @@ app.use((req, res, next) => {
   // Prevent this page from being iframed (clickjacking)
   res.setHeader('X-Frame-Options', 'DENY');
   // Basic CSP — tighten this for production
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; font-src https://fonts.gstatic.com; connect-src 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: blob:; font-src https://fonts.gstatic.com; connect-src 'self'");
   next();
 });
 
