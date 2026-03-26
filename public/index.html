@@ -256,79 +256,6 @@ select{cursor:pointer}
 .btn-navy:hover{background:var(--navy2)}
 .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 
-/* ═══ PIPELINE SETTINGS (no tabs) ═══ */
-.pipeline-panel{
-  background:linear-gradient(160deg, rgba(10,31,68,0.98), rgba(6,16,40,0.96));
-  border-radius:var(--rl);padding:1.5rem;margin-bottom:1.5rem;
-  border:1px solid rgba(192,192,192,0.13);
-  box-shadow:0 4px 32px rgba(0,0,0,0.50),inset 0 1px 0 rgba(255,255,255,0.04);
-}
-.pipeline-panel-header{
-  display:flex;align-items:flex-start;justify-content:space-between;
-  margin-bottom:1.25rem;flex-wrap:wrap;gap:10px;
-}
-.pipeline-panel-title{
-  font-family:'DM Serif Display',serif;font-size:16px;
-  color:var(--panel-txt);margin-bottom:3px;letter-spacing:-.01em;
-}
-.pipeline-panel-sub{font-size:12px;color:var(--panel-sub)}
-.pipeline-test-btn{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:7px 15px;border-radius:var(--r);
-  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;
-  background:var(--panel-hi);color:var(--panel-sub);
-  border:1px solid var(--panel-bd);cursor:pointer;
-  transition:all 0.18s var(--ease);white-space:nowrap;
-}
-.pipeline-test-btn:hover{background:rgba(255,255,255,0.10);color:var(--panel-txt)}
-
-/* Pipeline diagram */
-.pipeline-diagram{
-  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
-  padding:14px 16px;
-  background:rgba(0,0,0,0.18);
-  border:1px solid rgba(255,255,255,0.06);
-  border-radius:var(--r);margin-bottom:1.25rem;
-}
-.pipe-step{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:72px}
-.pipe-box{
-  font-size:11px;font-weight:700;padding:5px 10px;
-  border-radius:7px;text-align:center;white-space:nowrap;
-  background:rgba(96,165,250,0.15);color:#60A5FA;
-  border:1px solid rgba(96,165,250,0.28);
-}
-.pipe-box.amber{background:rgba(240,165,0,0.14);color:#e8a500;border-color:rgba(240,165,0,0.28)}
-.pipe-box.purple{background:rgba(124,92,191,0.18);color:#b89cf0;border-color:rgba(124,92,191,0.28)}
-.pipe-label{font-size:10px;color:var(--panel-dim);text-align:center}
-.pipe-arrow{color:rgba(255,255,255,0.18);font-size:14px;flex-shrink:0}
-
-/* Pipeline fields */
-.pipeline-fields{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
-.pipeline-field{flex:1;min-width:170px}
-.pipeline-field-sm{max-width:120px}
-.pipeline-label{
-  font-size:11px;font-weight:600;letter-spacing:.05em;
-  text-transform:uppercase;color:var(--panel-dim);margin-bottom:5px;
-}
-.p-input{
-  background:var(--panel-hi) !important;
-  border-color:var(--panel-bd) !important;
-  color:var(--panel-txt) !important;
-}
-.p-input::placeholder{color:var(--panel-dim) !important}
-.p-input:focus{
-  border-color:var(--teal) !important;
-  box-shadow:0 0 0 3px rgba(96,165,250,0.18) !important;
-}
-.conn-status{
-  display:flex;align-items:center;gap:8px;
-  font-size:12px;color:var(--panel-sub);
-  padding:9px 14px;
-  background:rgba(0,0,0,0.15);
-  border:1px solid var(--panel-bd);
-  border-radius:var(--r);margin-top:12px;
-}
-
 /* ═══ MODE TOGGLE ═══ */
 .mode-toggle{
   display:flex;gap:0;margin-bottom:1rem;
@@ -647,81 +574,6 @@ select{cursor:pointer}
 
   <div class="container">
 
-    <!-- Pipeline Settings (no tabs, always OCR Pipeline) -->
-    <div class="pipeline-panel">
-      <div class="pipeline-panel-header">
-        <div>
-          <div class="pipeline-panel-title">Pipeline Configuration</div>
-          <div class="pipeline-panel-sub">PaddleOCR + TrOCR + Qwen2.5-VL via RunPod Serverless</div>
-        </div>
-        <button class="pipeline-test-btn" onclick="testConnection()">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Test connection
-        </button>
-      </div>
-
-      <div class="pipeline-diagram">
-        <div class="pipe-step"><div class="pipe-box">PDF / Images</div><div class="pipe-label">Input</div></div>
-        <div class="pipe-arrow">→</div>
-        <div class="pipe-step"><div class="pipe-box">PaddleOCR</div><div class="pipe-label">Text + layout</div></div>
-        <div class="pipe-arrow">→</div>
-        <div class="pipe-step"><div class="pipe-box amber">TrOCR</div><div class="pipe-label">Handwriting</div></div>
-        <div class="pipe-arrow">→</div>
-        <div class="pipe-step"><div class="pipe-box purple">Qwen2.5-VL</div><div class="pipe-label">Marks / structure</div></div>
-        <div class="pipe-arrow">→</div>
-        <div class="pipe-step"><div class="pipe-box">Analysis</div><div class="pipe-label">Diagnostic JSON</div></div>
-      </div>
-
-      <div class="pipeline-fields">
-        <!-- RunPod Endpoint URL and API Key are now stored server-side (.env).
-             The frontend never touches the key. This field is kept read-only
-             so operators can verify which endpoint is active. -->
-        <div class="pipeline-field">
-          <div class="pipeline-label">RunPod Endpoint <span style="font-weight:400;text-transform:none;letter-spacing:0">(set in server .env)</span></div>
-          <input class="p-input" type="text" id="ocr-ollama-url" placeholder="Configured server-side — not required here" readonly style="opacity:0.5;cursor:not-allowed">
-        </div>
-        <!-- ocr-server-url kept hidden for legacy code compatibility -->
-        <input type="hidden" id="ocr-server-url" value="">
-        <input type="hidden" id="runpod-api-key" value="">
-        <div class="pipeline-field">
-          <div class="pipeline-label">Vision model</div>
-          <select class="p-input" id="ocr-vision-model">
-            <option value="qwen2.5vl:7b-q4_K_M">qwen2.5vl:7b-q4_K_M ⭐ (~4.7 GB)</option>
-            <option value="qwen2.5vl:7b-q8_0">qwen2.5vl:7b-q8_0 (best, ~8 GB)</option>
-            <option value="qwen2.5vl:3b-q4_K_M">qwen2.5vl:3b-q4_K_M (~2 GB)</option>
-            <option value="minicpm-v">minicpm-v (~5.5 GB)</option>
-            <option value="llava:7b-q4_0">llava:7b-q4_0 (~4 GB)</option>
-          </select>
-        </div>
-        <div class="pipeline-field">
-          <div class="pipeline-label">Text model</div>
-          <select class="p-input" id="ocr-text-model">
-            <option value="qwen2.5:7b-instruct-q4_K_M">qwen2.5:7b-instruct-q4_K_M ⭐ (~4.4 GB)</option>
-            <option value="qwen2.5:7b-instruct-q8_0">qwen2.5:7b-instruct-q8_0 (~8 GB)</option>
-            <option value="qwen2.5:3b">qwen2.5:3b (~2 GB)</option>
-            <option value="mistral">mistral (~4.1 GB)</option>
-          </select>
-        </div>
-        <div class="pipeline-field pipeline-field-sm">
-          <div class="pipeline-label">Timeout/page (min)</div>
-          <input class="p-input" type="number" id="ocr-timeout" value="15" min="3" max="120">
-        </div>
-      </div>
-
-      <!-- Hidden Ollama-only fields (for internal fallback use) -->
-      <div style="display:none">
-        <input type="url" id="ollama-url" value="http://localhost:11434">
-        <select id="ollama-vision"><option value="qwen2.5vl:7b-q4_K_M">qwen2.5vl:7b-q4_K_M</option><option value="qwen2.5vl:7b-q8_0">qwen2.5vl:7b-q8_0</option><option value="qwen2.5vl:3b-q4_K_M">qwen2.5vl:3b-q4_K_M</option><option value="minicpm-v">minicpm-v</option><option value="llava:7b-q4_0">llava:7b-q4_0</option><option value="llama3.2-vision">llama3.2-vision</option></select>
-        <select id="ollama-text"><option value="qwen2.5:7b-instruct-q4_K_M">qwen2.5:7b-instruct-q4_K_M</option><option value="qwen2.5:7b-instruct-q8_0">qwen2.5:7b-instruct-q8_0</option><option value="qwen2.5:3b">qwen2.5:3b</option><option value="mistral">mistral</option><option value="llama3.2">llama3.2</option></select>
-        <input type="number" id="ollama-timeout" value="15">
-      </div>
-
-      <div class="conn-status" id="conn-status">
-        <div class="status-dot" id="conn-dot"></div>
-        <span id="conn-text">Click "Test connection" to verify your setup</span>
-      </div>
-    </div>
-
     <!-- Student Info -->
     <div class="card">
       <div class="card-title">
@@ -837,78 +689,14 @@ let APP = {
   completedPages: new Set(['input'])
 };
 
-const CFG_KEY = 'diag_cfg_v5';
-const _saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
-// NOTE: 'runpod-api-key' is intentionally NOT in this list.
-// API keys must never be stored in localStorage — they live in the server .env file.
-const _CFG_IDS = [
-  'ollama-url','ollama-vision','ollama-text','ollama-timeout',
-  'ocr-server-url','ocr-ollama-url','ocr-vision-model','ocr-text-model','ocr-timeout'
-];
-_CFG_IDS.forEach(id => {
-  const el = document.getElementById(id);
-  const k  = id.replace(/-/g,'_');
-  if (_saved[k] && el) el.value = _saved[k];
-});
-
-function saveConfig() {
-  const obj = { provider: 'ocrpipeline' };
-  _CFG_IDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) obj[id.replace(/-/g,'_')] = el.value;
-  });
-  localStorage.setItem(CFG_KEY, JSON.stringify(obj));
-}
-
-// ── PROVIDER (always ocrpipeline) ──
-function switchProvider(p, noSave) {
-  APP.provider = 'ocrpipeline';
-  if (!noSave) saveConfig();
-  updateBadge();
-}
+// ── MODEL DEFAULTS (hardcoded — no UI panel needed) ──
+// Change these here if you deploy different models on RunPod.
+const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
+const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
+const DEFAULT_TIMEOUT_MIN  = 15;
 
 function updateBadge() {
   document.getElementById('status-label').textContent = 'OCR Pipeline';
-}
-
-function resetStatus(msg) {
-  document.getElementById('status-dot').className = 'status-dot';
-  document.getElementById('conn-dot').className   = 'status-dot';
-  document.getElementById('conn-text').textContent = msg || 'Click "Test connection" to verify your setup';
-}
-
-async function testConnection() {
-  saveConfig();
-  document.getElementById('status-dot').className = 'status-dot checking';
-  document.getElementById('conn-dot').className   = 'status-dot checking';
-  document.getElementById('conn-text').textContent = 'Testing RunPod connection via server…';
-
-  try {
-    // /api/health is a same-origin endpoint — the server holds the RunPod key.
-    const r = await fetch('/api/health', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { action: 'health' } }),
-      signal: AbortSignal.timeout(30000)
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    const out = d.output || d;
-    if (out.status !== 'ok') throw new Error('Endpoint unhealthy: ' + JSON.stringify(out));
-    const ocr    = out.services?.ocr_server || '?';
-    const ollama = out.services?.ollama     || '?';
-    document.getElementById('status-dot').className = 'status-dot ok';
-    document.getElementById('conn-dot').className   = 'status-dot ok';
-    document.getElementById('conn-text').textContent = `✓ Connected — OCR: ${ocr} · Ollama: ${ollama}`;
-  } catch(e) {
-    document.getElementById('status-dot').className = 'status-dot';
-    document.getElementById('conn-dot').className   = 'status-dot';
-    document.getElementById('conn-text').innerHTML  = '✗ ' + e.message;
-  }
-}
-
-function tips() {
-  alert('Setup:\n1. On your server, create a .env file with:\n   RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/YOUR_ID/runsync\n   RUNPOD_API_KEY=your_key_here\n2. Start the proxy server: node server.js\n3. Open this page served from the same origin (e.g. http://localhost:3000)\n4. Click "Test connection" — the server will verify the key without exposing it to the browser.\n\nYour API key is NEVER sent to or stored in the browser.');
 }
 
 // ── INPUT MODE ──
@@ -1086,11 +874,11 @@ async function callAI(prompt, images, pdfData) {
 
 // ── 1. OCR PIPELINE (via secure server-side proxy — key never touches the browser) ──
 async function callOCRPipeline(prompt, images) {
+  // Models and timeout are set via constants at the top of this script.
   // The API key and RunPod endpoint URL live in the server's .env file.
-  // This function only knows about /api/ai — a same-origin endpoint that holds the secret.
-  const visionModel =  document.getElementById('ocr-vision-model').value || 'qwen2.5vl:7b-q8_0';
-  const textModel   =  document.getElementById('ocr-text-model').value   || 'qwen2.5:7b-instruct-q4_K_M';
-  const timeoutMin  =  parseFloat(document.getElementById('ocr-timeout')?.value || '15');
+  const visionModel = DEFAULT_VISION_MODEL;
+  const textModel   = DEFAULT_TEXT_MODEL;
+  const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
   // All RunPod calls go through /api/ai — the server attaches the Authorization header.
   async function runpodCall(input, timeoutMs) {
@@ -1402,7 +1190,7 @@ function unlockPage(p) {
   document.getElementById('navs-' + p)?.classList.add('done');
 }
 function errCard(msg) {
-  return `<div class="card"><p style="color:var(--red);font-size:14px;font-weight:600;margin-bottom:6px">Error</p><p style="font-size:13px;color:var(--text2)">${msg}</p><div class="action-row" style="margin-top:12px"><button class="btn btn-sm btn-secondary" onclick="goPage('input')">← Back</button><button class="btn btn-sm" onclick="tips()" style="border-color:var(--bd2)">Setup tips</button></div></div>`;
+  return `<div class="card"><p style="color:var(--red);font-size:14px;font-weight:600;margin-bottom:6px">Error</p><p style="font-size:13px;color:var(--text2)">${msg}</p><div class="action-row" style="margin-top:12px"><button class="btn btn-sm btn-secondary" onclick="goPage('input')">← Back</button></div></div>`;
 }
 
 // ── DEMO ──
@@ -1418,7 +1206,6 @@ function loadDemo() {
 
 // ── DIAGNOSTIC FLOW ──
 async function runDiagnostic() {
-  saveConfig();
   const name     = document.getElementById('student-name').value.trim()  || 'Student';
   const grade    = document.getElementById('student-grade').value.trim();
   const subject  = document.getElementById('subject').value               || 'the subject';
