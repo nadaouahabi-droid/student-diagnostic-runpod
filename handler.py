@@ -34,7 +34,7 @@ def start_ollama():
     env["OLLAMA_MODELS"] = "/root/.ollama/models"
 
     proc = subprocess.Popen(
-        ["ollama", "serve"],
+        ["/usr/local/bin/ollama", "serve"],
         env=env,
         stdout=None,   # show logs
         stderr=None,
