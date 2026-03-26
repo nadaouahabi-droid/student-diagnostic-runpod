@@ -22,15 +22,11 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # ── System packages ──────────────────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        python3 \
-        python3-pip \
-        ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── Install Ollama ───────────────────────────────────────────────────────────
-RUN curl -fsSL https://ollama.ai/install.sh | sh
+RUN apt-get update && apt-get install -y curl ca-certificates && \
+    curl -fsSL https://ollama.ai/install.sh -o install.sh && \
+    chmod +x install.sh && \
+    ./install.sh && \
+    rm install.sh
 
 # ── Install Python dependencies ──────────────────────────────────────────────
 RUN pip3 install --no-cache-dir runpod requests
