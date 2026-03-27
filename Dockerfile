@@ -1,17 +1,14 @@
 # ============================================================
 # Student Diagnostic System — RunPod Serverless Worker
-# Image: ~4GB (code + deps only, NO models baked in)
+# Base: runpod/pytorch (already has torch + CUDA — saves ~4GB)
 # Models loaded at runtime from /runpod-volume/ (network volume)
 # ============================================================
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM runpod/pytorch:2.1.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ── System packages ──────────────────────────────────────────
-RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-dev \
-    python3-pip \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     libgomp1 \
@@ -21,26 +18,12 @@ RUN apt-get update && apt-get install -y \
     libxext6 && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Make python3.11 the default ──────────────────────────────
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --upgrade pip setuptools wheel
+# ── Install Ollama (recent stable version) ───────────────────
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# ── Install dependencies required by Ollama ─────────────────
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    libstdc++6 \
-    libgcc-s1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── Install Ollama (fixed version) ──────────────────────────
-RUN curl -L -o /usr/local/bin/ollama \
-    https://github.com/ollama/ollama/releases/download/v0.1.32/ollama-linux-amd64 && \
-    chmod +x /usr/local/bin/ollama
-
-# ── Install Python dependencies (including runpod) ───────────
-RUN python3.11 -m pip install --no-cache-dir \
+# ── Install Python dependencies ──────────────────────────────
+# torch is already in the base image — do NOT reinstall it
+RUN pip install --no-cache-dir \
     runpod \
     requests \
     paddlepaddle==3.0.0 \
@@ -48,12 +31,10 @@ RUN python3.11 -m pip install --no-cache-dir \
     opencv-python-headless \
     Pillow \
     numpy \
-    flask \
-    flask-cors \
     transformers \
-    torch \
     sentencepiece
 
+# ── Environment — point everything at the network volume ─────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
 ENV OLLAMA_ORIGINS=*
 ENV PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
@@ -65,4 +46,4 @@ ENV PADDLE_DISABLE_MKLDNN=1
 # ── Copy handler ─────────────────────────────────────────────
 COPY handler.py /handler.py
 
-CMD ["python3.11", "-u", "/handler.py"]
+CMD ["python", "-u", "/handler.py"]
