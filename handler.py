@@ -30,8 +30,8 @@ def start_ollama():
     print("[init] Starting Ollama server...", flush=True)
 
     env = os.environ.copy()
-    env["OLLAMA_HOST"] = "127.0.0.1:11434"
-    env["OLLAMA_MODELS"] = "/root/.ollama/models"
+    env["OLLAMA_HOST"]   = "127.0.0.1:11434"
+    env["OLLAMA_MODELS"] = "/runpod-volume/ollama-models"
 
     proc = subprocess.Popen(
         ["/usr/local/bin/ollama", "serve"],
