@@ -35,8 +35,8 @@ RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-lin
 RUN python3.11 -m pip install --no-cache-dir \
     runpod \
     requests \
-    paddlepaddle==3.0.0 \
-    paddleocr==3.0.0 \
+    paddlepaddle==2.6.1 \
+    paddleocr==2.7.3 \
     opencv-python-headless \
     Pillow \
     numpy \
