@@ -6,18 +6,12 @@ FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ── Fix Python + pip environment ─────────────────────────────
-RUN python -m pip install --upgrade pip setuptools wheel
-
+# ── System packages (single apt layer) ───────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     python3-dev \
     git \
-    && rm -rf /var/lib/apt/lists/*
-    
-# ── System packages ──────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     libgomp1 \
@@ -27,12 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Install Ollama manually ─────────────────────────────────
+# ── Upgrade pip toolchain ─────────────────────────────────────
+RUN python -m pip install --upgrade pip setuptools wheel
+
+# ── Install Ollama manually ───────────────────────────────────
 RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 \
     -o /usr/local/bin/ollama && \
     chmod +x /usr/local/bin/ollama
 
-# ── Python dependencies ──────────────────────────────────────
+# ── OCR dependencies ─────────────────────────────────────────
 RUN pip install --no-cache-dir \
     paddlepaddle==3.0.0 \
     paddleocr==3.0.0 \
@@ -40,7 +37,12 @@ RUN pip install --no-cache-dir \
     Pillow \
     opencv-python-headless
 
-RUN pip install --no-cache-dir --ignore-installed \
+# ── App dependencies ──────────────────────────────────────────
+# --ignore-installed blinker: the base image ships blinker 1.4 via
+# distutils (apt), which pip cannot safely uninstall. This flag tells
+# pip to install its own copy without touching the system package.
+RUN pip install --no-cache-dir \
+    --ignore-installed blinker \
     runpod \
     requests \
     transformers \
@@ -48,7 +50,7 @@ RUN pip install --no-cache-dir --ignore-installed \
     sentencepiece \
     flask \
     flask-cors
-    
+
 # ── Environment — point everything at the network volume ─────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
 ENV OLLAMA_ORIGINS=*
