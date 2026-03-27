@@ -1,14 +1,14 @@
 """
 RunPod Serverless Handler — Student Diagnostic System
 ======================================================
-Starts Ollama on worker init (once, not per request).
-Models are pre-baked into the Docker image on local NVMe.
+Boot sequence:
+  1. Ollama starts (loads models from /runpod-volume/ollama-models)
+  2. PaddleOCR + TrOCR lazy-load on first ocr-batch request
 
-FIXES:
-- Ollama starts at import time (RunPod-safe)
-- Added debug logs for deployment verification
-- Fixed silent OCR failures
-- Enabled logs for debugging
+Actions:
+  health      → service status
+  ocr-batch   → PaddleOCR (print text) → TrOCR (handwriting refinement)
+  ollama-chat → Ollama vision/text model
 """
 
 import runpod
@@ -17,18 +17,45 @@ import threading
 import time
 import requests
 import os
+import io
+import base64
+import logging
+import traceback
+from typing import Optional
 
-# ── Configuration ──────────────────────────────────────────────────────────
-OLLAMA_URL    = "http://127.0.0.1:11434"
-VISION_MODEL  = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q4_K_M")
-TEXT_MODEL    = os.environ.get("TEXT_MODEL",   "qwen2.5:7b-instruct-q4_K_M")
-OLLAMA_READY  = threading.Event()
+import numpy as np
+from PIL import Image, ImageEnhance
 
-# ── Start Ollama once at worker boot ───────────────────────────────────────
+# ── Set all cache env vars before any paddle/hf imports ──────
+os.environ['PADDLEX_HOME']           = '/runpod-volume/paddle-cache/.paddlex'
+os.environ['FLAGS_use_mkldnn']       = '0'
+os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
+os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
+os.environ['TRANSFORMERS_CACHE']    = '/runpod-volume/hf-cache/huggingface'
+os.environ['OLLAMA_MODELS']          = '/runpod-volume/ollama-models'
+os.environ['OLLAMA_ORIGINS']         = '*'
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+
+# ── Configuration ─────────────────────────────────────────────
+OLLAMA_URL   = "http://127.0.0.1:11434"
+VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q8_0")
+TEXT_MODEL   = os.environ.get("TEXT_MODEL",   "qwen2.5:7b-instruct-q4_K_M")
+OLLAMA_READY = threading.Event()
+
+# ── Lazy-loaded OCR models ────────────────────────────────────
+_paddle           = None
+_trocr_processor  = None
+_trocr_model      = None
+_trocr_device     = None
+
+
+# ═══════════════════════════════════════════════════════════════
+# OLLAMA BOOT
+# ═══════════════════════════════════════════════════════════════
 def start_ollama():
-    """Launch Ollama server in background and wait until it accepts requests."""
-    print("[init] Starting Ollama server...", flush=True)
-
+    log.info("[init] Starting Ollama server...")
     env = os.environ.copy()
     env["OLLAMA_HOST"]   = "127.0.0.1:11434"
     env["OLLAMA_MODELS"] = "/runpod-volume/ollama-models"
@@ -36,7 +63,7 @@ def start_ollama():
     proc = subprocess.Popen(
         ["/usr/local/bin/ollama", "serve"],
         env=env,
-        stdout=None,   # show logs
+        stdout=None,
         stderr=None,
     )
 
@@ -46,7 +73,7 @@ def start_ollama():
             r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=2)
             if r.status_code == 200:
                 models = [m["name"] for m in r.json().get("models", [])]
-                print(f"[init] Ollama ready. Models: {models}", flush=True)
+                log.info(f"[init] Ollama ready. Models: {models}")
                 OLLAMA_READY.set()
                 return proc
         except Exception:
@@ -56,15 +83,183 @@ def start_ollama():
     proc.kill()
     raise RuntimeError("[init] Ollama failed to start within 3 minutes")
 
-# ── Ollama chat helper ─────────────────────────────────────────────────────
-def ollama_chat(model, messages, options=None, timeout=120):
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "options": options or {"temperature": 0.05},
+
+# ═══════════════════════════════════════════════════════════════
+# OCR MODEL LOADERS (lazy — load on first request)
+# ═══════════════════════════════════════════════════════════════
+def get_paddle():
+    global _paddle
+    if _paddle is None:
+        log.info("[ocr] Loading PaddleOCR from volume cache...")
+        from paddleocr import PaddleOCR
+        _paddle = PaddleOCR(
+            use_angle_cls=True,
+            lang="en",
+            device="cpu",
+            # show_log and use_gpu removed in PaddleOCR 3.x
+            # enable_mkldnn disabled via env var FLAGS_use_mkldnn=0
+        )
+        log.info("[ocr] PaddleOCR ready.")
+    return _paddle
+
+
+def get_trocr():
+    global _trocr_processor, _trocr_model, _trocr_device
+    if _trocr_model is None:
+        log.info("[ocr] Loading TrOCR from volume cache...")
+        import torch
+        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        _trocr_device = "cuda" if torch.cuda.is_available() else "cpu"
+        ckpt = "microsoft/trocr-large-handwritten"
+        _trocr_processor = TrOCRProcessor.from_pretrained(
+            ckpt, cache_dir="/runpod-volume/hf-cache/huggingface"
+        )
+        _trocr_model = VisionEncoderDecoderModel.from_pretrained(
+            ckpt, cache_dir="/runpod-volume/hf-cache/huggingface"
+        ).to(_trocr_device)
+        _trocr_model.eval()
+        log.info(f"[ocr] TrOCR ready on {_trocr_device}.")
+    return _trocr_processor, _trocr_model, _trocr_device
+
+
+# ═══════════════════════════════════════════════════════════════
+# IMAGE HELPERS
+# ═══════════════════════════════════════════════════════════════
+def b64_to_pil(b64: str) -> Image.Image:
+    raw = base64.b64decode(b64)
+    return Image.open(io.BytesIO(raw)).convert("RGB")
+
+
+def preprocess(img: Image.Image, scale: float = 2.0) -> Image.Image:
+    """Upscale + sharpen for better OCR accuracy."""
+    w, h = img.size
+    img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    img = ImageEnhance.Sharpness(img).enhance(2.0)
+    img = ImageEnhance.Contrast(img).enhance(1.4)
+    return img
+
+
+# ═══════════════════════════════════════════════════════════════
+# PADDLEOCR — print text detection
+# ═══════════════════════════════════════════════════════════════
+def run_paddle(img: Image.Image) -> list:
+    """Return list of dicts: {bbox, text, confidence}"""
+    paddle = get_paddle()
+    arr    = np.array(img)
+    result = paddle.ocr(arr)   # cls=True removed in PaddleOCR 3.x
+    items  = []
+    if result and result[0]:
+        for line in result[0]:
+            if not line:
+                continue
+            bbox, (text, conf) = line
+            items.append({
+                "bbox":       bbox,
+                "text":       text.strip(),
+                "confidence": float(conf),
+            })
+    return items
+
+
+# ═══════════════════════════════════════════════════════════════
+# TROCR — handwriting refinement on low-confidence regions
+# ═══════════════════════════════════════════════════════════════
+def refine_with_trocr(img: Image.Image, bbox, pad: int = 6) -> Optional[str]:
+    """Crop the bbox from img, run TrOCR, return refined text or None."""
+    try:
+        import torch
+        processor, model, device = get_trocr()
+        xs = [p[0] for p in bbox]
+        ys = [p[1] for p in bbox]
+        x1 = max(0, int(min(xs)) - pad)
+        y1 = max(0, int(min(ys)) - pad)
+        x2 = min(img.width,  int(max(xs)) + pad)
+        y2 = min(img.height, int(max(ys)) + pad)
+        if x2 - x1 < 5 or y2 - y1 < 5:
+            return None
+        crop = img.crop((x1, y1, x2, y2))
+        # Upscale tiny crops so TrOCR has enough pixels
+        if crop.width < 64 or crop.height < 16:
+            scale = max(64 / crop.width, 16 / crop.height, 1)
+            crop  = crop.resize(
+                (int(crop.width * scale), int(crop.height * scale)),
+                Image.LANCZOS
+            )
+        pv = processor(images=crop, return_tensors="pt").pixel_values.to(device)
+        with torch.no_grad():
+            ids = model.generate(pv, max_new_tokens=80)
+        return processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
+    except Exception as exc:
+        log.debug(f"[ocr] TrOCR crop failed: {exc}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# FULL OCR PIPELINE FOR ONE PAGE
+# ═══════════════════════════════════════════════════════════════
+def ocr_page(b64: str, refine_threshold: float = 0.72) -> dict:
+    """
+    Stage A: PaddleOCR detects all text regions.
+    Stage B: TrOCR re-reads low-confidence regions (handwriting).
+    Returns: {text, lines, line_count, refined_count, timing_s}
+    """
+    import time as _time
+    t0 = _time.time()
+
+    img      = b64_to_pil(b64)
+    img_prep = preprocess(img)
+
+    # Stage A — PaddleOCR
+    items = run_paddle(img_prep)
+    log.info(f"[ocr] PaddleOCR → {len(items)} regions")
+
+    # Stage B — TrOCR refinement for low-confidence lines
+    output_lines  = []
+    refined_count = 0
+
+    for item in items:
+        text    = item["text"]
+        conf    = item["confidence"]
+        refined = False
+
+        if conf < refine_threshold and len(text.strip()) > 0:
+            # Scale bbox back to original image coords (we upscaled 2×)
+            orig_bbox = [[p[0] / 2.0, p[1] / 2.0] for p in item["bbox"]]
+            better    = refine_with_trocr(img, orig_bbox)
+            if better and len(better) >= len(text) * 0.5:
+                text    = better
+                refined = True
+                refined_count += 1
+
+        output_lines.append({
+            "text":       text,
+            "confidence": conf,
+            "refined":    refined,
+        })
+
+    full_text = "\n".join(l["text"] for l in output_lines if l["text"])
+    elapsed   = round(_time.time() - t0, 2)
+    log.info(f"[ocr] Page done: {len(output_lines)} lines, {refined_count} TrOCR-refined, {elapsed}s")
+
+    return {
+        "text":          full_text,
+        "lines":         output_lines,
+        "line_count":    len(output_lines),
+        "refined_count": refined_count,
+        "timing_s":      elapsed,
     }
 
+
+# ═══════════════════════════════════════════════════════════════
+# OLLAMA CHAT HELPER
+# ═══════════════════════════════════════════════════════════════
+def ollama_chat(model, messages, options=None, timeout=120):
+    payload = {
+        "model":    model,
+        "messages": messages,
+        "stream":   False,
+        "options":  options or {"temperature": 0.05},
+    }
     r = requests.post(
         f"{OLLAMA_URL}/api/chat",
         json=payload,
@@ -73,32 +268,74 @@ def ollama_chat(model, messages, options=None, timeout=120):
     r.raise_for_status()
     return r.json().get("message", {}).get("content", "")
 
-# ── Request handler ────────────────────────────────────────────────────────
-def handler(job):
 
+# ═══════════════════════════════════════════════════════════════
+# RUNPOD HANDLER
+# ═══════════════════════════════════════════════════════════════
+def handler(job):
     if not OLLAMA_READY.wait(timeout=180):
         return {"error": "Ollama not ready — timed out after 3 minutes"}
 
     job_input = job.get("input", {})
     action    = job_input.get("action", "ollama-chat")
 
-    # ── health ────────────────────────────────────────────────────────────
+    # ── health ───────────────────────────────────────────────
     if action == "health":
         try:
-            r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+            r      = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
             models = [m["name"] for m in r.json().get("models", [])]
             return {
                 "status": "ok",
                 "services": {
-                    "ollama": "running",
-                    "ocr_server": "ollama-vision"
+                    "ollama":     "ok",
+                    "ocr_server": "ok",   # PaddleOCR+TrOCR built into handler
                 },
                 "models_loaded": models,
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    # ── ollama-chat ───────────────────────────────────────────────────────
+    # ── ocr-batch ────────────────────────────────────────────
+    if action == "ocr-batch":
+        images    = job_input.get("images", [])
+        threshold = float(job_input.get("refine_threshold", 0.72))
+
+        if not images:
+            return {
+                "success":       False,
+                "error":         "No images provided",
+                "combined_text": "",
+                "pages":         [],
+            }
+
+        log.info(f"[ocr] Batch: {len(images)} page(s), threshold={threshold}")
+        pages   = []
+        success = True
+
+        for i, b64 in enumerate(images):
+            log.info(f"[ocr] Processing page {i+1}/{len(images)}...")
+            try:
+                result = ocr_page(b64, threshold)
+                pages.append({"page": i + 1, **result})
+            except Exception as e:
+                log.error(traceback.format_exc())
+                return {
+                    "success":         False,
+                    "error":           f"OCR failed on page {i+1}: {e}",
+                    "pages_completed": i,
+                }
+
+        combined = "\n\n".join(
+            f"=== PAGE {p['page']} ===\n{p['text']}" for p in pages
+        )
+        return {
+            "success":       True,
+            "pages":         pages,
+            "combined_text": combined,
+            "total_pages":   len(pages),
+        }
+
+    # ── ollama-chat ──────────────────────────────────────────
     if action == "ollama-chat":
         model    = job_input.get("model", TEXT_MODEL)
         messages = job_input.get("messages", [])
@@ -109,62 +346,17 @@ def handler(job):
             content = ollama_chat(model, messages, options, timeout)
             return {"content": content}
         except requests.exceptions.Timeout:
-            return {"error": f"Ollama request timed out after {timeout}s"}
+            return {"error": f"Ollama timed out after {timeout}s"}
         except Exception as e:
             return {"error": str(e)}
 
-    # ── ocr-batch ─────────────────────────────────────────────────────────
-    if action == "ocr-batch":
-        images  = job_input.get("images", [])
-        timeout = int(job_input.get("timeout_seconds", 900))
-
-        if not images:
-            return {
-                "success": False,
-                "error": "No images provided",
-                "combined_text": "",
-                "pages": []
-            }
-
-        pages    = []
-        combined = []
-        success  = True
-
-        for i, img_b64 in enumerate(images):
-            prompt = (
-                f"You are an expert OCR specialist analysing exam page {i + 1} of {len(images)}.\n"
-                "Extract ALL text exactly as written — every question number, mark scheme bracket, "
-                "student answer, tick mark (✓), cross mark (✗), circled score, and teacher correction.\n"
-                "Include crossed-out working verbatim.\n"
-                "Preserve structure. Do not summarise."
-            )
-
-            messages = [{
-                "role": "user",
-                "content": prompt,
-                "images": [img_b64]
-            }]
-
-            try:
-                text = ollama_chat(VISION_MODEL, messages, {"temperature": 0.05}, timeout)
-            except Exception as e:
-                text = f"[OCR error on page {i + 1}: {e}]"
-                success = False
-
-            pages.append({"page": i + 1, "text": text})
-            combined.append(f"=== PAGE {i + 1} ===\n{text}")
-
-        return {
-            "success": success,
-            "combined_text": "\n\n".join(combined),
-            "pages": pages,
-        }
-
     return {"error": f"Unknown action: '{action}'"}
 
-print("🚀 HANDLER VERSION V3 LOADED", flush=True)
 
+# ═══════════════════════════════════════════════════════════════
+# BOOT
+# ═══════════════════════════════════════════════════════════════
+log.info("🚀 Handler loading — starting Ollama...")
 start_ollama()
-
-print("[init] RunPod handler starting...", flush=True)
+log.info("[init] RunPod handler ready.")
 runpod.serverless.start({"handler": handler})
