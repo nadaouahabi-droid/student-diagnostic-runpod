@@ -1,9 +1,8 @@
 # ============================================================
 # Student Diagnostic System — RunPod Serverless Worker
-# Base: runpod/pytorch (already has torch + CUDA — saves ~4GB)
-# Models loaded at runtime from /runpod-volume/ (network volume)
+# Models are loaded from /runpod-volume/ (network volume).
 # ============================================================
-FROM runpod/pytorch:2.1.0-py3.10-cuda12.1.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -18,21 +17,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Install Ollama (recent stable version) ───────────────────
+# ── Install Ollama ───────────────────────────────────────────
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# ── Install Python dependencies ──────────────────────────────
-# torch is already in the base image — do NOT reinstall it
+# ── Python dependencies ──────────────────────────────────────
 RUN pip install --no-cache-dir \
     runpod \
     requests \
-    paddlepaddle==3.0.0 \
+    paddlepaddle-gpu==3.0.0 \
     paddleocr==3.0.0 \
     opencv-python-headless \
     Pillow \
     numpy \
     transformers \
-    sentencepiece
+    accelerate \
+    sentencepiece \
+    flask \
+    flask-cors
 
 # ── Environment — point everything at the network volume ─────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
