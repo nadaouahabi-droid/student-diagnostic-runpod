@@ -27,8 +27,8 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install --upgrade pip setuptools wheel
 
 # ── Install Ollama ───────────────────────────────────────────
-RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 \
-    -o /usr/local/bin/ollama && \
+RUN curl -L -o /usr/local/bin/ollama \
+    https://github.com/ollama/ollama/releases/download/v0.1.32/ollama-linux-amd64 && \
     chmod +x /usr/local/bin/ollama
 
 # ── Install Python dependencies (including runpod) ───────────
