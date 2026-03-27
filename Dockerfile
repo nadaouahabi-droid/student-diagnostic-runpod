@@ -3,7 +3,7 @@
 # Image: ~4GB (code + deps only, NO models baked in)
 # Models loaded at runtime from /runpod-volume/ (network volume)
 # ============================================================
-FROM --platform=linux/amd64 nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
