@@ -17,8 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Install Ollama ───────────────────────────────────────────
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# ── Install Ollama manually ─────────────────────────────────
+RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 \
+    -o /usr/local/bin/ollama && \
+    chmod +x /usr/local/bin/ollama
 
 # ── Python dependencies ──────────────────────────────────────
 RUN pip install --no-cache-dir \
