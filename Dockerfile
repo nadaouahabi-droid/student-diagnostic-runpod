@@ -22,15 +22,14 @@ RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-lin
     -o /usr/local/bin/ollama && \
     chmod +x /usr/local/bin/ollama
 
-# ── Heavy GPU dependencies first (cached)
+# ── Python dependencies ──────────────────────────────────────
 RUN pip install --no-cache-dir \
-    paddlepaddle-gpu==3.0.0.post121 -f https://www.paddlepaddle.org.cn/whl/linux/gpu.html \
+    paddlepaddle==3.0.0 \
     paddleocr==3.0.0 \
     numpy \
     Pillow \
     opencv-python-headless
 
-# ── Light dependencies
 RUN pip install --no-cache-dir \
     runpod \
     requests \
@@ -39,7 +38,7 @@ RUN pip install --no-cache-dir \
     sentencepiece \
     flask \
     flask-cors
-
+    
 # ── Environment — point everything at the network volume ─────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
 ENV OLLAMA_ORIGINS=*
