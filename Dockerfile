@@ -6,6 +6,16 @@ FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ── Fix Python + pip environment ─────────────────────────────
+RUN python -m pip install --upgrade pip setuptools wheel
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    python3-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+    
 # ── System packages ──────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
