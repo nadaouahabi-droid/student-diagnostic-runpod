@@ -1,14 +1,13 @@
 # ============================================================
-# Student Diagnostic System — RunPod Serverless (Ollama + PaddleOCR fixed)
+# Student Diagnostic System — RunPod Serverless Worker
 # ============================================================
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ── Install Python 3.11 explicitly (PaddleOCR requires <=3.11) ──
+# ── System packages ─────────────────────────────────────────
 RUN apt-get update && apt-get install -y \
     python3.11 \
-    python3.11-pip \
     python3.11-dev \
     python3-pip \
     curl \
@@ -22,24 +21,17 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 
 # ── Make python3.11 the default ─────────────────────────────
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
-    update-alternatives --install /usr/bin/pip3    pip3    /usr/bin/pip3.11    1 && \
-    python3 --version
-
-# ── Fix pkg_resources (setuptools regression) ───────────────
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+RUN python3.11 -m pip install --upgrade pip setuptools wheel
 
 # ── Install Ollama ───────────────────────────────────────────
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # ── Install Python dependencies ─────────────────────────────
-# PaddleOCR needs specific versions pinned for Python 3.11
-RUN pip3 install --no-cache-dir \
-    runpod \
-    requests \
-    setuptools \
-    paddlepaddle==2.6.1 \
-    paddleocr==2.7.3 \
+RUN python3.11 -m pip install \
+    paddlepaddle==3.2.2 \
+    paddleocr \
     opencv-python-headless \
     Pillow
 
@@ -49,12 +41,13 @@ ENV OLLAMA_MODELS=/root/.ollama/models
 RUN set -eux; \
     /usr/local/bin/ollama serve > /tmp/ollama.log 2>&1 & \
     sleep 8; \
-    /usr/local/bin/ollama pull qwen2.5vl:7b-q4_K_M; \
+    /usr/local/bin/ollama pull qwen2.5vl:7b-q8_0; \
     /usr/local/bin/ollama pull qwen2.5:7b-instruct-q4_K_M; \
     pkill -f "ollama serve" || true; \
     sleep 2; \
     echo "✓ Models baked"
 
+# ── Copy handler ─────────────────────────────────────────────
 COPY handler.py /handler.py
 
-CMD ["python3", "-u", "/handler.py"]
+CMD ["python3.11", "-u", "/handler.py"]
