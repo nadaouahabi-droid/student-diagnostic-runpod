@@ -26,7 +26,15 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install --upgrade pip setuptools wheel
 
-# ── Install Ollama ───────────────────────────────────────────
+# ── Install dependencies required by Ollama ─────────────────
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    libstdc++6 \
+    libgcc-s1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Install Ollama (fixed version) ──────────────────────────
 RUN curl -L -o /usr/local/bin/ollama \
     https://github.com/ollama/ollama/releases/download/v0.1.32/ollama-linux-amd64 && \
     chmod +x /usr/local/bin/ollama
