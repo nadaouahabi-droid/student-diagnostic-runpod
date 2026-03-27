@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir \
     Pillow \
     opencv-python-headless
 
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --ignore-installed \
     runpod \
     requests \
     transformers \
