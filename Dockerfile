@@ -49,7 +49,7 @@ ENV OLLAMA_MODELS=/root/.ollama/models
 RUN set -eux; \
     /usr/local/bin/ollama serve > /tmp/ollama.log 2>&1 & \
     sleep 8; \
-    /usr/local/bin/ollama pull qwen2.5vl:7b-q8_0; \
+    /usr/local/bin/ollama pull qwen2.5vl:7b-q4_K_M; \
     /usr/local/bin/ollama pull qwen2.5:7b-instruct-q4_K_M; \
     pkill -f "ollama serve" || true; \
     sleep 2; \
