@@ -2,7 +2,7 @@
 # Student Diagnostic System — RunPod Serverless Worker
 # Models are loaded from /runpod-volume/ (network volume).
 # ============================================================
-FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
+FROM --platform=linux/amd64 runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -10,7 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
-    python3-dev \
     git \
     curl \
     ca-certificates \
@@ -18,16 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
     libxrender1 \
-    libxext6 && \
+    libxext6 \
+    file && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Upgrade pip toolchain ─────────────────────────────────────
+# ── Upgrade pip ───────────────────────────────────────────────
 RUN python -m pip install --upgrade pip setuptools wheel
 
 # ── Install Ollama ────────────────────────────────────────────
-# Pinned to a specific release to avoid redirect/auth issues with
-# the "latest" GitHub asset URL. Verified sha256 for amd64.
-# To upgrade: change the version below and update the URL.
 ARG OLLAMA_VERSION=0.6.5
 RUN curl -fsSL \
     "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tgz" \
@@ -35,31 +32,34 @@ RUN curl -fsSL \
     tar -xzf /tmp/ollama.tgz -C /usr/local && \
     rm /tmp/ollama.tgz && \
     chmod +x /usr/local/bin/ollama && \
-    # Smoke-test: confirm the binary is executable and correct arch
+    file /usr/local/bin/ollama && \
     ollama --version
 
-# ── OCR dependencies ─────────────────────────────────────────
-RUN pip install --no-cache-dir \
-    paddlepaddle==3.0.0 \
-    paddleocr==3.0.0 \
-    numpy \
-    Pillow \
-    opencv-python-headless
+# ── App dependencies ──
+RUN pip install --no-cache-dir runpod requests
 
-# ── App dependencies ──────────────────────────────────────────
-# --ignore-installed blinker: base image has blinker 1.4 via distutils
-# which pip cannot uninstall cleanly.
 RUN pip install --no-cache-dir \
-    --ignore-installed blinker \
+    accelerate==0.30.1 \
+    transformers==4.41.2 \
+    sentencepiece
+
+RUN pip install --no-cache-dir \
     runpod \
     requests \
-    transformers \
-    accelerate \
+    accelerate==0.30.1 \
+    transformers==4.41.2 \
     sentencepiece \
     flask \
-    flask-cors
+    flask-cors && \
+    rm -rf /root/.cache /tmp/*
 
-# ── Environment — point everything at the network volume ─────
+# ── OCR (install last) ───────────────────────────────────────
+RUN pip install --no-cache-dir \
+    paddlepaddle==2.6.1 \
+    paddleocr==2.7.0.3 \
+    numpy Pillow opencv-python-headless
+
+# ── Environment ───────────────────────────────────────────────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
 ENV OLLAMA_ORIGINS=*
 ENV PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
