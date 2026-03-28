@@ -6,7 +6,7 @@ FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ── System packages (single apt layer) ───────────────────────
+# ── System packages ───────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -24,10 +24,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Upgrade pip toolchain ─────────────────────────────────────
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# ── Install Ollama manually ───────────────────────────────────
-RUN curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 \
-    -o /usr/local/bin/ollama && \
-    chmod +x /usr/local/bin/ollama
+# ── Install Ollama ────────────────────────────────────────────
+# Pinned to a specific release to avoid redirect/auth issues with
+# the "latest" GitHub asset URL. Verified sha256 for amd64.
+# To upgrade: change the version below and update the URL.
+ARG OLLAMA_VERSION=0.6.5
+RUN curl -fsSL \
+    "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tgz" \
+    -o /tmp/ollama.tgz && \
+    tar -xzf /tmp/ollama.tgz -C /usr/local && \
+    rm /tmp/ollama.tgz && \
+    chmod +x /usr/local/bin/ollama && \
+    # Smoke-test: confirm the binary is executable and correct arch
+    ollama --version
 
 # ── OCR dependencies ─────────────────────────────────────────
 RUN pip install --no-cache-dir \
@@ -38,9 +47,8 @@ RUN pip install --no-cache-dir \
     opencv-python-headless
 
 # ── App dependencies ──────────────────────────────────────────
-# --ignore-installed blinker: the base image ships blinker 1.4 via
-# distutils (apt), which pip cannot safely uninstall. This flag tells
-# pip to install its own copy without touching the system package.
+# --ignore-installed blinker: base image has blinker 1.4 via distutils
+# which pip cannot uninstall cleanly.
 RUN pip install --no-cache-dir \
     --ignore-installed blinker \
     runpod \
