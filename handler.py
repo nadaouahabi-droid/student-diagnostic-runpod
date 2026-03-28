@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────
 OLLAMA_URL   = "http://127.0.0.1:11434"
-VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q8_0")
+VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q4_K_M")
 TEXT_MODEL   = os.environ.get("TEXT_MODEL",   "qwen2.5:7b-instruct-q4_K_M")
 
 # ── Startup synchronisation events ───────────────────────────
