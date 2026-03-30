@@ -44,6 +44,7 @@ echo "=== Installing PaddleOCR ==="
 pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy --quiet
 
 echo "=== Downloading PaddleOCR weights (runs inference to trigger download) ==="
+PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex \
 FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 -c "
 from paddleocr import PaddleOCR
 from PIL import Image
@@ -56,9 +57,6 @@ ocr.ocr('/tmp/test.png')
 print('PaddleOCR weights downloaded successfully')
 "
 
-echo "=== Copying PaddleOCR weights to volume ==="
-mkdir -p /runpod-volume/paddle-cache
-cp -r ~/.paddlex /runpod-volume/paddle-cache/.paddlex
 echo "PaddleOCR done. Contents:"
 ls /runpod-volume/paddle-cache/.paddlex/official_models/
 
@@ -68,6 +66,15 @@ echo "=== Installing Transformers ==="
 pip install transformers torch sentencepiece --quiet
 
 echo "=== Downloading TrOCR weights ==="
+# BUG FIX: Point HF_HOME at the target volume path so weights are
+# downloaded directly there.  Previously the script downloaded to
+# the default ~/.cache/huggingface and then cp'd them across, but
+# the destination path ended up as:
+#   /runpod-volume/hf-cache/huggingface/huggingface/hub/...
+#              ^^^ extra 'huggingface' level from `cp -r`
+# which doesn't match HF_HOME=/runpod-volume/hf-cache/huggingface
+# that the handler sets.  Downloading directly avoids the mismatch.
+HF_HOME=/runpod-volume/hf-cache/huggingface \
 python3 -c "
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 ckpt = 'microsoft/trocr-large-handwritten'
@@ -76,9 +83,6 @@ VisionEncoderDecoderModel.from_pretrained(ckpt)
 print('TrOCR weights downloaded successfully')
 "
 
-echo "=== Copying TrOCR weights to volume ==="
-mkdir -p /runpod-volume/hf-cache
-cp -r ~/.cache/huggingface /runpod-volume/hf-cache/
 echo "TrOCR done. Contents:"
 ls /runpod-volume/hf-cache/huggingface/
 
