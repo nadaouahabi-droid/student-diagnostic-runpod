@@ -608,17 +608,55 @@ async function callOCRPipeline(prompt, images) {
   const textModel   = DEFAULT_TEXT_MODEL;
   const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
-  async function runpodCall(input, timeoutMs) {
-    const r = await fetch('/api/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input }),
-      signal: AbortSignal.timeout(timeoutMs || 600000)
-    });
-    if (!r.ok) { const t = await r.text(); throw new Error('Server proxy ' + r.status + ': ' + t.slice(0,200)); }
-    const data = await r.json();
-    return data.output || data;
+  async function runpodCall(input, timeoutMs = 600000) {
+  // 1️⃣ Submit job
+  const r = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  });
+
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error('Server proxy ' + r.status + ': ' + t.slice(0, 200));
   }
+
+  const { jobId } = await r.json();
+  if (!jobId) {
+    throw new Error('No jobId returned from server');
+  }
+
+  console.log("Job submitted:", jobId);
+
+  // 2️⃣ Poll until done
+  const start = Date.now();
+
+  while (true) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error("Timeout waiting for RunPod job");
+    }
+
+    const poll = await fetch(`/api/status?jobId=${jobId}`);
+    const data = await poll.json();
+
+    console.log("Status:", data.status);
+
+    if (data.status === "COMPLETED") {
+      return data.output;
+    }
+
+    if (data.status === "FAILED") {
+      throw new Error("RunPod job failed: " + JSON.stringify(data));
+    }
+
+    if (data.status === "CANCELLED" || data.status === "TIMED_OUT") {
+      throw new Error("RunPod job " + data.status);
+    }
+
+    // wait 3s before next check
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
 
   // Text-only path
   if (!images || !images.length) {
