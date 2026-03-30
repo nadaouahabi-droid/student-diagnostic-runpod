@@ -85,15 +85,10 @@ echo ""
 echo "=== Installing PaddleOCR ==="
 pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy --quiet
 
-echo "=== Downloading PaddleOCR weights directly to volume ==="
-# Export PADDLEX_HOME so PaddleX writes weights straight to the volume
-# No cp needed — weights land in the right place on first run
-PADDLEX_HOME=$PADDLEX_HOME \
-FLAGS_use_mkldnn=0 \
-PADDLE_DISABLE_MKLDNN=1 \
-python3 -c "
-import os
-print('PADDLEX_HOME =', os.environ.get('PADDLEX_HOME'))
+echo "=== Downloading PaddleOCR weights (to default /root/.paddlex) ==="
+# Do NOT set PADDLEX_HOME here — let PaddleOCR write to its hardcoded default
+# We copy to the volume after download is complete
+FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 -c "
 from paddleocr import PaddleOCR
 from PIL import Image
 img = Image.new('RGB', (200, 50), color='white')
@@ -103,43 +98,40 @@ ocr.predict('/tmp/test.png')
 print('PaddleOCR weights downloaded successfully')
 "
 
-echo "=== PaddleOCR volume structure ==="
-find $PADDLEX_HOME -type d
-
-echo "=== Verifying PaddleOCR weights ==="
-if find $PADDLEX_HOME -name "*.pdmodel" | grep -q .; then
-  echo "✅ PaddleOCR model files (.pdmodel) confirmed on volume:"
-  find $PADDLEX_HOME -name "*.pdmodel"
-else
-  echo "❌ ERROR: No .pdmodel files found under PADDLEX_HOME!"
-  echo "Contents of PADDLEX_HOME:"
-  find $PADDLEX_HOME -type f | head -30
-  exit 1
-fi
-
-# ✅ Fonts go inside PADDLEX_HOME so PaddleX finds them at runtime
-echo "=== Pre-downloading PaddleOCR fonts into PADDLEX_HOME ==="
-mkdir -p $PADDLEX_HOME/fonts
-FONT_BASE="https://paddle-model-ecology.bj.bcebos.com/paddlex/PaddleX3.0/fonts"
-wget -q "$FONT_BASE/PingFang-SC-Regular.ttf" -O $PADDLEX_HOME/fonts/PingFang-SC-Regular.ttf
-wget -q "$FONT_BASE/simfang.ttf"              -O $PADDLEX_HOME/fonts/simfang.ttf
-
-echo "✅ Fonts confirmed:"
-ls -lh $PADDLEX_HOME/fonts/
+echo "=== Verifying weights in default path ==="
+EXPECTED_MODELS="PP-LCNet_x0_25_textline_ori PP-LCNet_x1_0_doc_ori PP-OCRv5_mobile_det PP-OCRv5_mobile_rec UVDoc"
+for model in $EXPECTED_MODELS; do
+  if [ -f "/root/.paddlex/official_models/$model/inference.pdiparams" ]; then
+    echo "  ✅ $model"
+  else
+    echo "  ❌ MISSING: $model"
+    exit 1
+  fi
+done
 
 echo "=== Copying PaddleOCR weights to volume ==="
-# Weights are already written to PADDLEX_HOME by the python call above
-# (since we exported PADDLEX_HOME pointing to the volume)
-echo "PaddleOCR contents:"
-ls $PADDLEX_HOME/official_models/
+mkdir -p /runpod-volume/paddle-cache/.paddlex
+cp -r /root/.paddlex/official_models /runpod-volume/paddle-cache/.paddlex/
 
-if ls $PADDLEX_HOME/official_models/ &>/dev/null; then
-  echo "✅ PaddleOCR weights confirmed on volume"
-else
-  echo "❌ ERROR: PaddleOCR weights NOT found on volume!"
-  exit 1
-fi
+echo "=== Verifying weights on volume ==="
+for model in $EXPECTED_MODELS; do
+  if [ -f "/runpod-volume/paddle-cache/.paddlex/official_models/$model/inference.pdiparams" ]; then
+    echo "  ✅ $model"
+  else
+    echo "  ❌ MISSING on volume: $model"
+    exit 1
+  fi
+done
+echo "✅ All PaddleOCR weights confirmed on volume"
 
+echo "=== Pre-downloading PaddleOCR fonts into PADDLEX_HOME ==="
+mkdir -p /runpod-volume/paddle-cache/.paddlex/fonts
+FONT_BASE="https://paddle-model-ecology.bj.bcebos.com/paddlex/PaddleX3.0/fonts"
+wget -q "$FONT_BASE/PingFang-SC-Regular.ttf" -O /runpod-volume/paddle-cache/.paddlex/fonts/PingFang-SC-Regular.ttf
+wget -q "$FONT_BASE/simfang.ttf"              -O /runpod-volume/paddle-cache/.paddlex/fonts/simfang.ttf
+
+echo "✅ Fonts confirmed:"
+ls -lh /runpod-volume/paddle-cache/.paddlex/fonts/
 # ------------------------------------------------------------
 # 4. TrOCR (HuggingFace)
 # ------------------------------------------------------------
