@@ -260,9 +260,6 @@ def run_paddle(img: Image.Image) -> list:
 
     log.info(f"[ocr] Extracted {len(items)} items")
     return items
-  
-result = paddle.predict(arr)
-log.error(f"[DEBUG] Paddle raw output: {result}")
 
 # ═══════════════════════════════════════════════════════════════
 # TROCR — handwriting refinement on low-confidence regions
