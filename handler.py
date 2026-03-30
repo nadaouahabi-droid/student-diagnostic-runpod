@@ -200,25 +200,50 @@ def run_paddle(img: Image.Image) -> list:
     if not result:
         return items
 
+    # 🔥 Normalize result to iterable list
+    if isinstance(result, dict):
+        result = [result]
+
     for page in result:
+        # If page itself is a string → wrap it
+        if isinstance(page, str):
+            items.append({
+                "bbox": [],
+                "text": page.strip(),
+                "confidence": 1.0
+            })
+            continue
+
         if not page:
             continue
 
+        # If page is dict → treat as single line
+        if isinstance(page, dict):
+            page = [page]
+
         for line in page:
             try:
-                # ✅ Case 1: dict format (new PaddleOCR)
+                # 🔴 Case: string (THIS IS YOUR CRASH CASE)
+                if isinstance(line, str):
+                    items.append({
+                        "bbox": [],
+                        "text": line.strip(),
+                        "confidence": 1.0
+                    })
+                    continue
+
+                # ✅ Case: dict (new PaddleOCR)
                 if isinstance(line, dict):
                     text = line.get("rec_text", "").strip()
                     conf = float(line.get("rec_score", 0))
                     bbox = line.get("bbox", [])
 
-                # ✅ Case 2: list format (old PaddleOCR)
+                # ✅ Case: list (old PaddleOCR)
                 elif isinstance(line, list) and len(line) >= 2:
                     bbox = line[0]
                     text = line[1][0].strip()
                     conf = float(line[1][1])
 
-                # ❌ Unknown format → skip
                 else:
                     continue
 
@@ -230,9 +255,10 @@ def run_paddle(img: Image.Image) -> list:
                     })
 
             except Exception as e:
-                log.debug(f"[ocr] Skipping malformed line: {line} | error: {e}")
+                log.warning(f"[ocr] Skipping bad line: {line} | error: {e}")
                 continue
 
+    log.info(f"[ocr] Extracted {len(items)} items")
     return items
 
 
