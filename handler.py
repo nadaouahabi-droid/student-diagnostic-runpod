@@ -192,20 +192,47 @@ def preprocess(img: Image.Image, scale: float = 2.0) -> Image.Image:
 # ═══════════════════════════════════════════════════════════════
 def run_paddle(img: Image.Image) -> list:
     paddle = get_paddle()
-    arr    = np.array(img)
+    arr = np.array(img)
 
-    # ✅ FIX: use .predict() — .ocr() is deprecated in PaddleOCR 3.0
     result = paddle.predict(arr)
-    items  = []
-    if result:
-        for page in result:
-            for line in (page or []):
-                if not line:
+    items = []
+
+    if not result:
+        return items
+
+    for page in result:
+        if not page:
+            continue
+
+        for line in page:
+            try:
+                # ✅ Case 1: dict format (new PaddleOCR)
+                if isinstance(line, dict):
+                    text = line.get("rec_text", "").strip()
+                    conf = float(line.get("rec_score", 0))
+                    bbox = line.get("bbox", [])
+
+                # ✅ Case 2: list format (old PaddleOCR)
+                elif isinstance(line, list) and len(line) >= 2:
+                    bbox = line[0]
+                    text = line[1][0].strip()
+                    conf = float(line[1][1])
+
+                # ❌ Unknown format → skip
+                else:
                     continue
-                bbox = line.get("bbox") or line[0]
-                text = (line.get("rec_text") or line[1][0]).strip()
-                conf = float(line.get("rec_score") or line[1][1])
-                items.append({"bbox": bbox, "text": text, "confidence": conf})
+
+                if text:
+                    items.append({
+                        "bbox": bbox,
+                        "text": text,
+                        "confidence": conf
+                    })
+
+            except Exception as e:
+                log.debug(f"[ocr] Skipping malformed line: {line} | error: {e}")
+                continue
+
     return items
 
 
