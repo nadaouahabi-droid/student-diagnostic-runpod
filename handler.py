@@ -61,9 +61,16 @@ def _ollama_boot():
     env["OLLAMA_MODELS"] = "/runpod-volume/ollama-models"
 
     proc = subprocess.Popen(
-        ["/usr/local/bin/ollama", "serve"],
+        ["ollama", "serve"],
         env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
     )
+    def stream_logs():
+        for line in proc.stdout:
+            log.info(f"[ollama] {line.strip()}")
+    threading.Thread(target=stream_logs, daemon=True).start()
 
     deadline = time.time() + 240          # 4-minute hard limit
     while time.time() < deadline:
