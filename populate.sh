@@ -13,10 +13,11 @@ df -h | grep runpod || { echo "ERROR: /runpod-volume not mounted"; exit 1; }
 export HF_HOME=/runpod-volume/hf-cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME
 export OLLAMA_MODELS=/runpod-volume/ollama-models
+export PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
 
 mkdir -p $HF_HOME
 mkdir -p $OLLAMA_MODELS
-mkdir -p /runpod-volume/paddle-cache/fonts
+mkdir -p $PADDLEX_HOME/fonts           # ✅ FIX: fonts must live inside PADDLEX_HOME
 
 # ------------------------------------------------------------
 # 1. Ollama models
@@ -25,7 +26,6 @@ echo ""
 echo "=== Installing Ollama ==="
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Stop any auto-started Ollama service spawned by the installer
 echo "=== Stopping any auto-started Ollama service ==="
 systemctl stop ollama 2>/dev/null || true
 systemctl disable ollama 2>/dev/null || true
@@ -36,7 +36,6 @@ echo "=== Starting Ollama with correct model path ==="
 OLLAMA_MODELS=/runpod-volume/ollama-models ollama serve &
 OLLAMA_PID=$!
 
-# Wait until Ollama is actually ready (instead of fixed sleep)
 echo "=== Waiting for Ollama to be ready ==="
 for i in $(seq 1 20); do
   ollama list &>/dev/null && echo "  Ollama ready after ${i}s" && break
@@ -61,7 +60,6 @@ else
   exit 1
 fi
 
-# Warn if models leaked to default path
 if [ -d "/root/.ollama/models" ] && [ "$(ls -A /root/.ollama/models 2>/dev/null)" ]; then
   echo "⚠️  WARNING: Files found in default /root/.ollama/models — possible leak!"
   du -sh /root/.ollama/models
@@ -75,7 +73,7 @@ sleep 2
 # ------------------------------------------------------------
 echo ""
 echo "=== Setting up Python 3.10 ==="
-apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-distutils ccache
+apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-distutils wget ccache
 python3.10 -m venv /tmp/venv
 source /tmp/venv/bin/activate
 pip install --upgrade pip setuptools wheel
@@ -88,33 +86,32 @@ echo "=== Installing PaddleOCR ==="
 pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy --quiet
 
 echo "=== Downloading PaddleOCR weights ==="
-FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 -c "
+PADDLEX_HOME=$PADDLEX_HOME FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 -c "
 from paddleocr import PaddleOCR
 from PIL import Image
 img = Image.new('RGB', (200, 50), color='white')
 img.save('/tmp/test.png')
 ocr = PaddleOCR(use_textline_orientation=True, lang='en', device='cpu')
-ocr.ocr('/tmp/test.png')
+ocr.predict('/tmp/test.png')
 print('PaddleOCR weights downloaded successfully')
 "
 
-# Pre-download fonts so they are never fetched at runtime
-echo "=== Pre-downloading PaddleOCR fonts ==="
+# ✅ FIX: Fonts must go inside PADDLEX_HOME so PaddleX finds them at runtime
+echo "=== Pre-downloading PaddleOCR fonts into PADDLEX_HOME ==="
 FONT_BASE="https://paddle-model-ecology.bj.bcebos.com/paddlex/PaddleX3.0/fonts"
-wget -q "$FONT_BASE/PingFang-SC-Regular.ttf" -O /runpod-volume/paddle-cache/fonts/PingFang-SC-Regular.ttf
-wget -q "$FONT_BASE/simfang.ttf"              -O /runpod-volume/paddle-cache/fonts/simfang.ttf
+wget -q "$FONT_BASE/PingFang-SC-Regular.ttf" -O $PADDLEX_HOME/fonts/PingFang-SC-Regular.ttf
+wget -q "$FONT_BASE/simfang.ttf"              -O $PADDLEX_HOME/fonts/simfang.ttf
 
-echo "✅ Fonts downloaded:"
-ls -lh /runpod-volume/paddle-cache/fonts/
+echo "✅ Fonts downloaded to PADDLEX_HOME/fonts:"
+ls -lh $PADDLEX_HOME/fonts/
 
 echo "=== Copying PaddleOCR weights to volume ==="
-cp -r /root/.paddlex /runpod-volume/paddle-cache/
-
+# Weights are already written to PADDLEX_HOME by the python call above
+# (since we exported PADDLEX_HOME pointing to the volume)
 echo "PaddleOCR contents:"
-ls /runpod-volume/paddle-cache/.paddlex/official_models/
+ls $PADDLEX_HOME/official_models/
 
-# Verify paddle copy succeeded
-if ls /runpod-volume/paddle-cache/.paddlex/official_models/ &>/dev/null; then
+if ls $PADDLEX_HOME/official_models/ &>/dev/null; then
   echo "✅ PaddleOCR weights confirmed on volume"
 else
   echo "❌ ERROR: PaddleOCR weights NOT found on volume!"
@@ -129,6 +126,8 @@ echo "=== Installing Transformers ==="
 pip install transformers torch sentencepiece --quiet
 
 echo "=== Downloading TrOCR weights ==="
+# ✅ FIX: HF_HOME env var is set — from_pretrained without cache_dir
+# will write to HF_HOME/hub/ automatically
 HF_HOME=$HF_HOME python3 -c "
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 ckpt = 'microsoft/trocr-large-handwritten'
@@ -138,11 +137,10 @@ print('TrOCR weights downloaded successfully')
 "
 
 echo "TrOCR contents:"
-ls $HF_HOME
+ls $HF_HOME/hub/
 
-# Verify TrOCR download
-if [ "$(ls -A $HF_HOME 2>/dev/null)" ]; then
-  echo "✅ TrOCR weights confirmed on volume"
+if [ "$(ls -A $HF_HOME/hub/ 2>/dev/null)" ]; then
+  echo "✅ TrOCR weights confirmed on volume at HF_HOME/hub/"
 else
   echo "❌ ERROR: TrOCR weights NOT found on volume!"
   exit 1
@@ -153,7 +151,7 @@ fi
 # ------------------------------------------------------------
 echo ""
 echo "=== FINAL STRUCTURE ==="
-find /runpod-volume -maxdepth 3 -type d
+find /runpod-volume -maxdepth 4 -type d
 
 echo ""
 echo "=== DISK USAGE ==="
@@ -166,9 +164,9 @@ du -sh /runpod-volume
 echo ""
 echo "=== FINAL SANITY CHECK ==="
 echo -n "Ollama models:     "; ls /runpod-volume/ollama-models/manifests/registry.ollama.ai/library/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "PaddleOCR models:  "; ls /runpod-volume/paddle-cache/.paddlex/official_models/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "PaddleOCR fonts:   "; ls /runpod-volume/paddle-cache/fonts/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "HuggingFace cache: "; ls $HF_HOME 2>/dev/null | tr '\n' ' ' && echo ""
+echo -n "PaddleOCR models:  "; ls $PADDLEX_HOME/official_models/ 2>/dev/null | tr '\n' ' ' && echo ""
+echo -n "PaddleOCR fonts:   "; ls $PADDLEX_HOME/fonts/ 2>/dev/null | tr '\n' ' ' && echo ""
+echo -n "HuggingFace cache: "; ls $HF_HOME/hub/ 2>/dev/null | tr '\n' ' ' && echo ""
 
 echo ""
 echo "✅ Volume populated successfully. You can now terminate this pod."
