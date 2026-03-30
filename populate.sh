@@ -40,8 +40,16 @@ kill $OLLAMA_PID 2>/dev/null || true
 
 # ── 2. PaddleOCR weights ─────────────────────────────────────
 echo ""
+echo "=== Setting up Python 3.10 environment ==="
+apt-get update && apt-get install -y python3.10 python3.10-venv
+
+python3.10 -m venv /tmp/venv
+source /tmp/venv/bin/activate
+
+pip install --upgrade pip setuptools wheel
+
 echo "=== Installing PaddleOCR ==="
-pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy --quiet
+pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy
 
 echo "=== Downloading PaddleOCR weights (runs inference to trigger download) ==="
 PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex \
