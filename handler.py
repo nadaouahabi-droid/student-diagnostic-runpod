@@ -25,23 +25,43 @@ from PIL import Image, ImageEnhance
 # ── Cache env vars BEFORE any paddle/hf imports ──────────────
 os.environ['PADDLEX_HOME']          = '/runpod-volume/paddle-cache/.paddlex'
 os.environ['FLAGS_use_mkldnn']      = '0'
-os.environ['PADDLE_DISABLE_MKLDNN']= '1'
-os.environ['HF_HOME']              = '/runpod-volume/hf-cache/huggingface'
-os.environ['TRANSFORMERS_CACHE']   = '/runpod-volume/hf-cache/huggingface'
-os.environ['OLLAMA_MODELS']        = '/runpod-volume/ollama-models'
-os.environ['OLLAMA_ORIGINS']       = '*'
+os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
+os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
+os.environ['OLLAMA_MODELS']         = '/runpod-volume/ollama-models'
+os.environ['OLLAMA_ORIGINS']        = '*'
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
+REQUIRED_MODELS    = ["qwen2.5vl:7b-q8_0", "qwen2.5:7b-instruct-q4_K_M"]
+OLLAMA_MODELS_PATH = "/runpod-volume/ollama-models/manifests/registry.ollama.ai/library"
+
+# ✅ Correct HF cache dir — models live under HF_HOME/hub/
+HF_CACHE_DIR = "/runpod-volume/hf-cache/huggingface/hub"
+
+
+def verify_models_on_volume():
+    for model_name in REQUIRED_MODELS:
+        model_dir = model_name.split(":")[0]
+        path = os.path.join(OLLAMA_MODELS_PATH, model_dir)
+        if not os.path.isdir(path):
+            raise RuntimeError(
+                f"❌ Model '{model_name}' not found at {path}. "
+                f"Did you run the populate script on the network volume?"
+            )
+    log.info("✅ All required Ollama models found on volume.")
+
+
+verify_models_on_volume()
+
 # ── Configuration ─────────────────────────────────────────────
 OLLAMA_URL   = "http://127.0.0.1:11434"
-VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q4_K_M")
+VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:7b-q8_0")
 TEXT_MODEL   = os.environ.get("TEXT_MODEL",   "qwen2.5:7b-instruct-q4_K_M")
 
 # ── Startup synchronisation events ───────────────────────────
-OLLAMA_READY = threading.Event()   # set once Ollama HTTP is up
-MODELS_READY = threading.Event()   # set once PaddleOCR+TrOCR are loaded
+OLLAMA_READY = threading.Event()
+MODELS_READY = threading.Event()
 
 # ── Model singletons ─────────────────────────────────────────
 _paddle          = None
@@ -51,28 +71,17 @@ _trocr_device    = None
 
 
 # ═══════════════════════════════════════════════════════════════
-# OLLAMA BOOT  (runs in background thread)
+# OLLAMA BOOT
 # ═══════════════════════════════════════════════════════════════
 def _ollama_boot():
-    """Start Ollama and signal OLLAMA_READY when HTTP is up."""
     log.info("[init] Starting Ollama server...")
     env = os.environ.copy()
     env["OLLAMA_HOST"]   = "127.0.0.1:11434"
     env["OLLAMA_MODELS"] = "/runpod-volume/ollama-models"
 
-    proc = subprocess.Popen(
-        ["ollama", "serve"],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-    def stream_logs():
-        for line in proc.stdout:
-            log.info(f"[ollama] {line.strip()}")
-    threading.Thread(target=stream_logs, daemon=True).start()
+    proc = subprocess.Popen(["ollama", "serve"], env=env)
 
-    deadline = time.time() + 240          # 4-minute hard limit
+    deadline = time.time() + 240
     while time.time() < deadline:
         try:
             r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
@@ -86,60 +95,66 @@ def _ollama_boot():
         time.sleep(2)
 
     proc.kill()
-    log.error("[init] Ollama FAILED to start within 4 minutes — OLLAMA_READY will never be set")
+    log.error("[init] Ollama FAILED to start within 4 minutes.")
 
 
 # ═══════════════════════════════════════════════════════════════
-# OCR PRE-WARM  (runs in background thread after Ollama is up)
+# OCR PRE-WARM
 # ═══════════════════════════════════════════════════════════════
 def _ocr_prewarm():
-    """
-    Load PaddleOCR and TrOCR immediately after Ollama is ready.
-    This ensures the first real job finds warm models.
-    """
-    if not OLLAMA_READY.wait(timeout=260):
-        log.error("[init] Skipping OCR pre-warm — Ollama never became ready.")
-        return
+    global _paddle, _trocr_processor, _trocr_model, _trocr_device
+
+    paddle_ok = False
+    trocr_ok  = False
 
     log.info("[init] Pre-warming PaddleOCR...")
     try:
         from paddleocr import PaddleOCR
-        global _paddle
-        _paddle = PaddleOCR(use_angle_cls=True, lang="en", device="cpu")
+        _paddle = PaddleOCR(use_textline_orientation=True, lang="en", device="cpu")
         log.info("[init] PaddleOCR ready.")
+        paddle_ok = True
     except Exception:
         log.error("[init] PaddleOCR pre-warm FAILED:\n" + traceback.format_exc())
 
-    log.info("[init] Pre-warming TrOCR (microsoft/trocr-large-handwritten)...")
+    log.info("[init] Pre-warming TrOCR...")
     try:
         import torch
         from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-        global _trocr_processor, _trocr_model, _trocr_device
 
-        _trocr_device    = "cuda" if torch.cuda.is_available() else "cpu"
-        ckpt             = "microsoft/trocr-large-handwritten"
+        _trocr_device = "cuda" if torch.cuda.is_available() else "cpu"
+        ckpt = "microsoft/trocr-large-handwritten"
+
+        # ✅ FIX: use cache_dir pointing to HF_HOME/hub where models were saved
         _trocr_processor = TrOCRProcessor.from_pretrained(
-            ckpt, cache_dir="/runpod-volume/hf-cache/huggingface"
+            ckpt, cache_dir=HF_CACHE_DIR
         )
         _trocr_model = VisionEncoderDecoderModel.from_pretrained(
-            ckpt, cache_dir="/runpod-volume/hf-cache/huggingface"
+            ckpt, cache_dir=HF_CACHE_DIR
         ).to(_trocr_device)
+
         _trocr_model.eval()
         log.info(f"[init] TrOCR ready on {_trocr_device}.")
+        trocr_ok = True
+
     except Exception:
         log.error("[init] TrOCR pre-warm FAILED:\n" + traceback.format_exc())
 
-    MODELS_READY.set()
-    log.info("[init] ✅ All models warm — worker is fully ready.")
+    if paddle_ok and trocr_ok:
+        MODELS_READY.set()
+        log.info("[init] ✅ All models warm — worker is fully ready.")
+    else:
+        log.error(
+            f"[init] ❌ Pre-warm incomplete — PaddleOCR={'ok' if paddle_ok else 'FAILED'}, "
+            f"TrOCR={'ok' if trocr_ok else 'FAILED'}"
+        )
 
 
-# ── Launch background threads immediately at import time ──────
 threading.Thread(target=_ollama_boot,  daemon=True, name="ollama-boot").start()
 threading.Thread(target=_ocr_prewarm, daemon=True, name="ocr-prewarm").start()
 
 
 # ═══════════════════════════════════════════════════════════════
-# OCR MODEL ACCESSORS  (return already-loaded singletons)
+# OCR MODEL ACCESSORS
 # ═══════════════════════════════════════════════════════════════
 def get_paddle():
     if _paddle is None:
@@ -175,18 +190,19 @@ def preprocess(img: Image.Image, scale: float = 2.0) -> Image.Image:
 def run_paddle(img: Image.Image) -> list:
     paddle = get_paddle()
     arr    = np.array(img)
-    result = paddle.ocr(arr)
+
+    # ✅ FIX: use .predict() — .ocr() is deprecated in PaddleOCR 3.0
+    result = paddle.predict(arr)
     items  = []
-    if result and result[0]:
-        for line in result[0]:
-            if not line:
-                continue
-            bbox, (text, conf) = line
-            items.append({
-                "bbox":       bbox,
-                "text":       text.strip(),
-                "confidence": float(conf),
-            })
+    if result:
+        for page in result:
+            for line in (page or []):
+                if not line:
+                    continue
+                bbox = line.get("bbox") or line[0]
+                text = (line.get("rec_text") or line[1][0]).strip()
+                conf = float(line.get("rec_score") or line[1][1])
+                items.append({"bbox": bbox, "text": text, "confidence": conf})
     return items
 
 
@@ -279,7 +295,6 @@ def handler(job):
     job_input = job.get("input", {})
     action    = job_input.get("action", "ollama-chat")
 
-    # ── health — doesn't need models, just Ollama ────────────
     if action == "health":
         try:
             r      = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
@@ -293,17 +308,14 @@ def handler(job):
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    # ── All other actions need both Ollama + OCR models ──────
-    # Wait up to 5 min total (covers first cold boot with model download)
     STARTUP_TIMEOUT = 300
 
     if not OLLAMA_READY.wait(timeout=STARTUP_TIMEOUT):
         return {"error": "Ollama not ready — timed out. Check worker logs."}
 
-    if action in ("ocr-batch",) and not MODELS_READY.wait(timeout=STARTUP_TIMEOUT):
+    if action == "ocr-batch" and not MODELS_READY.wait(timeout=STARTUP_TIMEOUT):
         return {"error": "OCR models not ready — timed out. Check worker logs."}
 
-    # ── ocr-batch ────────────────────────────────────────────
     if action == "ocr-batch":
         images    = job_input.get("images", [])
         threshold = float(job_input.get("refine_threshold", 0.72))
@@ -332,7 +344,6 @@ def handler(job):
         return {"success": True, "pages": pages,
                 "combined_text": combined, "total_pages": len(pages)}
 
-    # ── ollama-chat ──────────────────────────────────────────
     if action == "ollama-chat":
         model    = job_input.get("model", TEXT_MODEL)
         messages = job_input.get("messages", [])
@@ -349,8 +360,5 @@ def handler(job):
     return {"error": f"Unknown action: '{action}'"}
 
 
-# ═══════════════════════════════════════════════════════════════
-# ENTRY POINT — background threads already started above
-# ═══════════════════════════════════════════════════════════════
 log.info("🚀 Handler loaded — Ollama boot and OCR pre-warm running in background threads.")
 runpod.serverless.start({"handler": handler})
