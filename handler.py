@@ -39,18 +39,21 @@ OLLAMA_MODELS_PATH = "/runpod-volume/ollama-models/manifests/registry.ollama.ai/
 # ✅ Correct HF cache dir — models live under HF_HOME/hub/
 HF_CACHE_DIR = "/runpod-volume/hf-cache/huggingface/hub"
 
-
 def verify_models_on_volume():
+    missing = []
     for model_name in REQUIRED_MODELS:
         model_dir = model_name.split(":")[0]
         path = os.path.join(OLLAMA_MODELS_PATH, model_dir)
         if not os.path.isdir(path):
-            raise RuntimeError(
-                f"❌ Model '{model_name}' not found at {path}. "
-                f"Did you run the populate script on the network volume?"
-            )
-    log.info("✅ All required Ollama models found on volume.")
+            missing.append(model_name)
 
+    if missing:
+        log.error(
+            f"⚠️  Models not found on volume (is network volume attached?): {missing}\n"
+            f"  Expected path: {OLLAMA_MODELS_PATH}"
+        )
+    else:
+        log.info("✅ All required Ollama models found on volume.")
 
 verify_models_on_volume()
 
