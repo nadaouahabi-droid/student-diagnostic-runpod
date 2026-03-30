@@ -34,19 +34,14 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
         torch==2.2.0 --index-url https://download.pytorch.org/whl/cu121 && \
     pip install --no-cache-dir \
-        runpod \
-        requests \
-        accelerate==0.30.1 \
-        transformers==4.41.2 \
-        sentencepiece \
-        flask \
-        flask-cors \
-        numpy \
-        Pillow \
-        opencv-python-headless \
-        paddlepaddle==3.0.0 \
-        paddleocr==3.0.0 && \
-    rm -rf /root/.cache /tmp/*
+        runpod requests accelerate==0.30.1 transformers==4.41.2 \
+        sentencepiece numpy Pillow opencv-python-headless \
+        paddlepaddle==3.0.0 paddleocr==3.0.0 && \
+    # ✅ Aggressively clean after install
+    pip cache purge && \
+    rm -rf /root/.cache /tmp/* /var/tmp/* && \
+    find /usr -name "*.pyc" -delete && \
+    find /usr -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # ── Environment ───────────────────────────────────────────────
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
