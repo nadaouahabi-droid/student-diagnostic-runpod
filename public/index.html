@@ -483,7 +483,6 @@ async function fileToB64(file) {
     r.readAsDataURL(file);
   });
 }
-
 function compressCanvas(canvas, maxPx, quality) {
   maxPx = maxPx || 1000; quality = quality || 0.85;
   let w = canvas.width, h = canvas.height;
