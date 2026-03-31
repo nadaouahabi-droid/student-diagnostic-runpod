@@ -194,7 +194,7 @@ def run_paddle(img: Image.Image) -> list:
     paddle = get_paddle()
     arr = np.array(img)
 
-    result = paddle.predict(arr)
+    result = paddle.ocr(arr, cls=True)
     items = []
 
     if not result:
@@ -294,7 +294,7 @@ def ocr_page(b64: str, refine_threshold: float = 0.72) -> dict:
     img      = b64_to_pil(b64)
     img_prep = preprocess(img)
 
-    items = run_paddle(img_prep)
+    items = run_paddle(img)
     log.info(f"[ocr] PaddleOCR → {len(items)} regions")
 
     output_lines  = []
