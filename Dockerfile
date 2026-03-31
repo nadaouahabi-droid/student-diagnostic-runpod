@@ -47,10 +47,29 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 ENV OLLAMA_MODELS=/runpod-volume/ollama-models
 
 ENV OLLAMA_ORIGINS="*"
+ENV PADDLE_HOME=/runpod-volume/paddle-cache
 ENV PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
 ENV HF_HOME=/runpod-volume/hf-cache/huggingface
+
 ENV FLAGS_use_mkldnn=0
 ENV PADDLE_DISABLE_MKLDNN=1
+
+# ── Pre-download PaddleOCR assets ─────────────
+RUN python - <<EOF
+from paddleocr import PaddleOCR
+print("Pre-downloading PaddleOCR models...")
+ocr = PaddleOCR(use_textline_orientation=True, lang="en")
+print("Done.")
+EOF
+
+# ── Pre-download TrOCR ───────────────────────
+RUN python - <<EOF
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+print("Pre-downloading TrOCR...")
+TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
+VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten")
+print("Done.")
+EOF
 
 # ── Copy handler ──────────────────────────────────────────────
 COPY handler.py /handler.py
