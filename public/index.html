@@ -428,6 +428,7 @@ let APP = {
 const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
+const DEFAULT_SYSTEM       = 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. No trailing commas. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. ASCII text only in string values. CRITICAL GROUNDING RULE: Only report what you actually observe in the provided content — never invent questions, marks, answers, or topics that are not explicitly present.';
 
 // ── INPUT MODE ──
 function switchMode(m) {
@@ -635,13 +636,8 @@ async function callAI(prompt, images, pdfData, systemMsg) {
   return callOCRPipeline(prompt, images, systemMsg);
 }
 
-// ── OCR PIPELINE ──
-async function callOCRPipeline(prompt, images, customSystemMsg) {
-  const visionModel = DEFAULT_VISION_MODEL;
-  const textModel   = DEFAULT_TEXT_MODEL;
-  const timeoutMin  = DEFAULT_TIMEOUT_MIN;
-
-  async function runpodCall(input, timeoutMs = 600000) {
+// ── RUNPOD POLLING HELPER (top-level so planCall and others can use it) ──
+async function runpodCall(input, timeoutMs = 600000) {
   // 1️⃣ Submit job
   const r = await fetch('/api/ai', {
     method: 'POST',
@@ -690,6 +686,12 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     await new Promise(r => setTimeout(r, 3000));
   }
 }
+
+// ── OCR PIPELINE ──
+async function callOCRPipeline(prompt, images, customSystemMsg) {
+  const visionModel = DEFAULT_VISION_MODEL;
+  const textModel   = DEFAULT_TEXT_MODEL;
+  const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
   // Text-only path
   if (!images || !images.length) {
@@ -787,7 +789,7 @@ CRITICAL: Your Step 2 output must contain exactly the same question numbers as y
     action: 'ollama-chat',
     model: textModel,
     messages: [
-      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. No trailing commas. ASCII text only in string values.' },
+      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. No trailing commas. ASCII text only in string values. CRITICAL GROUNDING RULE: Your questions array must contain ONLY the questions that are explicitly listed in the EXAM CONTENT provided. Do not invent, add, or rephrase questions. Every question number, mark, and student answer must come directly from the provided exam content.' },
       { role: 'user', content: fullPrompt }
     ],
     options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
@@ -1000,7 +1002,7 @@ function navToReport() {
 }
 function navToWorksheet() {
   if (!APP.completedPages.has('worksheet')) return;
-  if (APP.plan && !APP.worksheet) { generateWorksheet(); } else { goPage('worksheet'); }
+  if (!APP.worksheet) { generateWorksheet(); } else { goPage('worksheet'); }
 }
 function unlockPage(p) {
   APP.completedPages.add(p);
@@ -1540,24 +1542,16 @@ Return this exact structure with real content replacing placeholders:
 ${mathPlanExtras()}`;
 
   async function planCall(p) {
-    const r = await fetch('/api/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: {
-        action: 'ollama-chat',
-        model: DEFAULT_TEXT_MODEL,
-        messages: [
-          { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters.' },
-          { role: 'user', content: p }
-        ],
-        options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192 },
-        timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-      }}),
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MIN * 60000 + 30000)
-    });
-    if (!r.ok) { const t = await r.text(); throw new Error('Server ' + r.status + ': ' + t.slice(0,200)); }
-    const data = await r.json();
-    return (data.output || data).content || '';
+    return (await runpodCall({
+      action: 'ollama-chat',
+      model: DEFAULT_TEXT_MODEL,
+      messages: [
+        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters.' },
+        { role: 'user', content: p }
+      ],
+      options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192 },
+      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
+    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000)).content || '';
   }
 
   try {
