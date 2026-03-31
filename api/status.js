@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
-  const { jobId } = req.query;
-
   try {
+    const { jobId } = req.query;
+
     const response = await fetch(
       `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/status/${jobId}`,
       {
@@ -12,9 +12,10 @@ export default async function handler(req, res) {
     );
 
     const data = await response.json();
-    res.status(200).json(data);
+
+    return res.status(200).json(data);
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
