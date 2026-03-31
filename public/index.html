@@ -703,7 +703,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
         { role: 'system', content: customSystemMsg || DEFAULT_SYSTEM },
         { role: 'user',   content: prompt }
       ],
-      options: { temperature: 0.05, num_predict: 4096, num_ctx: 32768 },
+      options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
       timeout_seconds: Math.round(timeoutMin * 60)
     }, timeoutMin * 60000 + 30000);
     return out.content || '';
