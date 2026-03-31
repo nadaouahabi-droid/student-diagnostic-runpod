@@ -5,27 +5,23 @@ export default async function handler(req, res) {
       body = JSON.parse(body);
     }
 
-    const OCR_ENDPOINT = process.env.OCR_ENDPOINT;
-    const API_KEY = process.env.RUNPOD_API_KEY;
-
-    const response = await fetch(OCR_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        input: {
-          action: "ocr-batch",
-          images: body.images
+    const response = await fetch(
+      `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/run`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.RUNPOD_API_KEY}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          input: body.input || body,
+        }),
+      }
+    );
 
     const data = await response.json();
 
     return res.status(200).json({
-      step: "ocr_started",
       jobId: data.id
     });
 
