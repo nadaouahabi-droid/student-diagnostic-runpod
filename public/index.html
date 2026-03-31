@@ -631,12 +631,12 @@ function updateLoadingText(pageId, title, sub) {
 }
 
 // ── API LAYER ──
-async function callAI(prompt, images, pdfData) {
-  return callOCRPipeline(prompt, images);
+async function callAI(prompt, images, pdfData, systemMsg) {
+  return callOCRPipeline(prompt, images, systemMsg);
 }
 
 // ── OCR PIPELINE ──
-async function callOCRPipeline(prompt, images) {
+async function callOCRPipeline(prompt, images, customSystemMsg) {
   const visionModel = DEFAULT_VISION_MODEL;
   const textModel   = DEFAULT_TEXT_MODEL;
   const timeoutMin  = DEFAULT_TIMEOUT_MIN;
@@ -698,10 +698,10 @@ async function callOCRPipeline(prompt, images) {
       action: 'ollama-chat',
       model: textModel,
       messages: [
-        { role: 'system', content: 'You are an expert educational diagnostic specialist. CRITICAL GROUNDING RULE: When analysing an exam, you must ONLY report what you actually observe in the provided content. Never invent question numbers, marks, student answers, or topics that are not explicitly present. If something is unclear or illegible, say so — do not guess. When asked to return JSON, return ONLY valid JSON — no markdown fences, no preamble, no trailing commas, no comments. Use double quotes only. Never use single quotes as JSON delimiters. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. If you need to reference a quoted term inside a string value, use parentheses instead of quotes. Never use backslashes except for valid JSON escape sequences (\\", \\\\, \\/,  \\b, \\f, \\n, \\r, \\t, \\uXXXX).' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: customSystemMsg || DEFAULT_SYSTEM },
+        { role: 'user',   content: prompt }
       ],
-      options: { temperature: 0.05, num_predict: 6144, num_ctx: 8192 },
+      options: { temperature: 0.05, num_predict: 4096, num_ctx: 32768 },
       timeout_seconds: Math.round(timeoutMin * 60)
     }, timeoutMin * 60000 + 30000);
     return out.content || '';
@@ -770,7 +770,7 @@ CRITICAL: Your Step 2 output must contain exactly the same question numbers as y
           { role: 'system', content: 'You are an expert exam marker. Extract all content accurately.' },
           { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.05, num_predict: 2000, num_ctx: 8192 },
+        options: { temperature: 0.05, num_predict: 2000, num_ctx: 32768 },
         timeout_seconds: Math.round(timeoutMin * 60)
       }, timeoutMin * 60000 + 30000);
       pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || pageOCR}`);
@@ -1622,12 +1622,19 @@ async function generateWorksheet() {
   const d = APP.analysis || {};
   const weak     = (d.topicPerformance||[]).filter(t=>t.level!=='strong').map(t=>t.topic).slice(0,4).join(', ') || APP.subject + ' fundamentals';
   const mistakes = (d.keyMistakes||[]).map(m=>m.title).join(', ') || 'general practice';
+  const questionGrounding = (d.questions || []).length > 0
+    ? `\nGROUND-TRUTH EXAM QUESTIONS (base new questions on these topics, question styles, and mistake patterns — do not copy them verbatim, but mirror the difficulty and format):\n`
+      + d.questions.map(q =>
+          `Q${q.number}: "${q.questionText}" [${q.topic}, ${q.marksAvailable} marks available, ${q.marksAwarded} awarded${q.marksAwarded < q.marksAvailable ? ' — student got this WRONG' : ''}]`
+        ).join('\n')
+    : '';
 
   const prompt = `Create a targeted practice worksheet. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not ², sqrt() not √, +/- not ±, pi not π).
 
 Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}
 Target weak topics: ${weak}
 Mistakes to address: ${mistakes}
+${questionGrounding}
 
 Field rules:
 - number: integer 1-10
@@ -1644,7 +1651,10 @@ Use this exact JSON shape (replace placeholder values, keep all field names):
 Replace ALL 10 placeholder questions with real exam-style questions targeting ${APP.studentName}'s weak areas.`;
 
   try {
-    const raw     = await callAI(prompt);
+    const raw = await callAI(
+      prompt, null, null,
+      'You are an expert educational marker. Mark the student worksheet using ONLY the questions, correct answers, and student responses provided in this message. Do not invent or substitute your own questions. Return valid JSON exactly as instructed.'
+    );
     APP.worksheet = parseJSON(raw);
     renderWorksheet(APP.worksheet);
   } catch(e) {
