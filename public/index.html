@@ -735,31 +735,24 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     );
     const pageOCR = ocrRaw.pages?.[i]?.text || '';
     console.log("PAGE OCR:", i, pageOCR.slice(0, 500));
-    // In callOCRPipeline(), replace the pagePrompt construction:
+    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR. Analyse page ${i+1} of ${images.length}.
+${mathOCRRules()}
+Initial OCR text (verify and correct against the image):
+${pageOCR}
 
-const pagePrompt = `You are an experienced exam marker. Transcribe page ${i+1} of ${images.length} 
-  from the image ONLY. Ignore the OCR draft below if it conflicts with what you see — 
-  the image is the ground truth.
-  
-  OCR DRAFT (may contain errors — use only as a hint for structure):
-  ${pageOCR}
-  
-  RULES:
-  - STEP 1: List every question number visible on this page (e.g. "Q1a, Q1b, Q2, Q3").
-    If you cannot see a question clearly, write "Q? [illegible]" — never skip it.
-  - STEP 2: For each question from Step 1, output EXACTLY:
-  
-  Q<id>:
-  QUESTION TEXT: [exact printed text, max 20 words]
-  MARKS AVAILABLE: [number in brackets e.g. [2] at end of question — write digit only, or "unknown"]
-  STUDENT ANSWER: [full handwritten working verbatim, include crossed-out work]
-  MARKS AWARDED: [count ticks = 1 each; circled/boxed number overrides tick count; write digit or "unmarked"]
-  TEACHER NOTE: [corrections in different ink, or "none"]
-  
-  PAGE SCORE: [circled total at bottom, or "not shown"]
-  
-  CRITICAL: Output Step 2 for EXACTLY the same questions as Step 1 — no additions.
-  ${mathOCRRules()}`;
+STEP 1 — QUESTION INVENTORY: Before writing anything else, scan the entire page and list every question number you can see, including sub-parts (e.g. "Questions visible on this page: Q1a, Q1b, Q2, Q3a, Q3b, Q3c"). Do not skip questions or sub-parts, even if the student left them blank.
+
+STEP 2 — For each question or sub-question from Step 1, produce this exact block:
+Q<number>: [exact question text as printed/written — e.g. Q1a, Q2, Q3b]
+MARKS AVAILABLE: [marks allocated to this question or sub-question. Look for a number inside square brackets printed at the END of the question line or in the RIGHT margin e.g. [2], [3 marks], (2). Also check inside the answer workspace box or lines — some scripts print the mark allocation there as [X marks]. Write the numeric value only e.g. 2. If truly absent write 0]
+STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work]
+MARKS AWARDED: [marks the teacher has given this question. Look for: ticks (each tick = 1 mark unless otherwise indicated), crosses, a circled or boxed number written by the teacher, a fraction like 1/2, or a number in a different ink or colour. Count all ticks visible. A circled or boxed number overrides tick count — use that number. If the teacher wrote 0, record 0 unless it is crossed out and replaced. If blank and no marks visible, write "unmarked". Write a numeric value only e.g. 2 or 0]
+TEACHER NOTE: [corrections or comments in different ink, or "none"]
+CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+
+PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
+
+CRITICAL: Your Step 2 output must contain exactly the same question numbers as your Step 1 inventory — no additions, no omissions.`;
 
     try {
       const pageOut = await runpodCall({
