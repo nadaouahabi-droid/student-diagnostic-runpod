@@ -772,7 +772,7 @@ CRITICAL: Your Step 2 output must contain exactly the same question numbers as y
           { role: 'system', content: 'You are an expert exam marker. Extract all content accurately.' },
           { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.05, num_predict: 2000, num_ctx: 32768 },
+        options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
         timeout_seconds: Math.round(timeoutMin * 60)
       }, timeoutMin * 60000 + 30000);
       pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || pageOCR}`);
@@ -820,7 +820,7 @@ async function ollamaStream(url, model, prompt, isVision, imageB64, timeoutMs) {
         action: 'ollama-chat',
         model,
         messages: [{ role: 'system', content: systemMsg }, userMsg],
-        options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 8192 },
+        options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 8192},
         timeout_seconds: Math.round((timeoutMs || 900000) / 1000)
       }
     }),
