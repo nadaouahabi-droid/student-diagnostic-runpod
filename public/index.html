@@ -744,7 +744,8 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       'Identifying marks, ticks and corrections',
       i, images.length
     );
-    const pageOCR    = ocrText.split(/=== PAGE \d+ ===/)[i + 1] || '';
+    const pageOCR = ocrRaw.pages?.[i]?.text || '';
+    console.log("PAGE OCR:", i, pageOCR.slice(0, 500));
     const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR. Analyse page ${i+1} of ${images.length}.
 ${mathOCRRules()}
 Initial OCR text (verify and correct against the image):
