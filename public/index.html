@@ -592,10 +592,9 @@ async function handlePDF(file) {
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      applyOCRPreprocessing(canvas);   
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;   
       APP.images.push({
-        base64:   compressCanvas(canvas, 2400, 0.92),
+        base64:   compressCanvas(canvas, 2200, 0.9),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
