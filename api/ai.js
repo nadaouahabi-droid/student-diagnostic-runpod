@@ -14,7 +14,7 @@ export default async function handler(req, res) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          input: body.input || body,
+          input: body,
         }),
       }
     );
