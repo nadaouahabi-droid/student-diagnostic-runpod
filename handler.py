@@ -23,7 +23,11 @@ import numpy as np
 from PIL import Image, ImageEnhance
 
 # ── Cache env vars BEFORE any paddle/hf imports ──────────────
-os.environ['PADDLEX_HOME']          = '/runpod-volume/paddle-cache/.paddlex'
+ENV PADDLE_HOME=/runpod-volume/paddle-cache
+ENV PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
+ENV PPOCR_HOME=/runpod-volume/paddle-cache/.ppocr
+ENV PADDLEOCR_HOME=/runpod-volume/paddle-cache/.ppocr
+
 os.environ['FLAGS_use_mkldnn']      = '0'
 os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
 os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
