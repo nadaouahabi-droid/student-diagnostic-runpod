@@ -642,7 +642,7 @@ async function runpodCall(input, timeoutMs = 600000) {
   const r = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
+    body: JSON.stringify(input),
   });
 
   if (!r.ok) {
@@ -817,13 +817,11 @@ async function ollamaStream(url, model, prompt, isVision, imageB64, timeoutMs) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      input: {
-        action: 'ollama-chat',
-        model,
-        messages: [{ role: 'system', content: systemMsg }, userMsg],
-        options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 8192},
-        timeout_seconds: Math.round((timeoutMs || 900000) / 1000)
-      }
+      action: 'ollama-chat',
+      model,
+      messages: [{ role: 'system', content: systemMsg }, userMsg],
+      options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 32768 },
+      timeout_seconds: Math.round((timeoutMs || 900000) / 1000)
     }),
     signal: AbortSignal.timeout(timeoutMs || 900000)
   });
