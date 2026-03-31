@@ -450,8 +450,6 @@ dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag
 
 async function handleFiles(files) {
   for (const f of files) {
-    // FIX: check filename extension first — iOS Safari and some Android browsers
-    // send f.type='' for PDFs picked from Files app, so MIME-only checks silently drop them.
     const isPDF = f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf';
     const isImg = !isPDF && (f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|tiff?)$/i.test(f.name));
     if (isPDF) {
@@ -531,8 +529,6 @@ async function handlePDF(file) {
   APP.pdfData = await fileToB64(file);
   APP.pdfName = file.name;
 
-  // FIX: if pdf.js CDN failed to load, show a clear actionable error instead of
-  // silently storing pdfData with no images — the diagnostic needs APP.images populated.
   if (typeof pdfjsLib === 'undefined') {
     prog.style.color = 'var(--red)';
     prog.textContent = '⚠ PDF renderer failed to load (CDN may be blocked). Try refreshing, or convert your PDF to images (JPG/PNG) before uploading.';
@@ -556,14 +552,12 @@ async function handlePDF(file) {
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
-      // FIX: update previews incrementally so user sees progress as pages render
       renderPreviews();
     }
     prog.style.color = 'var(--teal-dim)';
     prog.textContent = `✓ ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} ready`;
     setTimeout(() => { prog.style.display = 'none'; prog.style.color = 'var(--text-3)'; }, 2500);
   } catch(e) {
-    // FIX: surface the real error with helpful hints for common failure modes
     prog.style.color = 'var(--red)';
     prog.style.display = 'block';
     const hint = /password/i.test(e.message)
@@ -636,9 +630,8 @@ async function callAI(prompt, images, pdfData, systemMsg) {
   return callOCRPipeline(prompt, images, systemMsg);
 }
 
-// ── RUNPOD POLLING HELPER (top-level so planCall and others can use it) ──
+// ── RUNPOD POLLING HELPER ──
 async function runpodCall(input, timeoutMs = 600000) {
-  // 1️⃣ Submit job
   const r = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -657,7 +650,6 @@ async function runpodCall(input, timeoutMs = 600000) {
 
   console.log("Job submitted:", jobId);
 
-  // 2️⃣ Poll until done
   const start = Date.now();
 
   while (true) {
@@ -682,7 +674,6 @@ async function runpodCall(input, timeoutMs = 600000) {
       throw new Error("RunPod job " + data.status);
     }
 
-    // wait 3s before next check
     await new Promise(r => setTimeout(r, 3000));
   }
 }
@@ -709,7 +700,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     return out.content || '';
   }
 
-  // REPLACE the Stage 1 block with this:
   updateLoadingText('analysis',
     `Reading exam pages… (${images.length} page${images.length > 1 ? 's' : ''})`,
     'Extracting handwriting and printed text'
@@ -721,7 +711,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     timeout_seconds: Math.round(timeoutMin * images.length * 60)
   }, timeoutMin * images.length * 60000 + 30000);
   
-  // Log raw response so you can inspect it in browser DevTools (F12 → Console)
   console.log('[Stage 1 raw response]', JSON.stringify(ocrRaw).slice(0, 500));
   
   if (!ocrRaw.success) {
@@ -755,9 +744,9 @@ STEP 1 — QUESTION INVENTORY: Before writing anything else, scan the entire pag
 
 STEP 2 — For each question or sub-question from Step 1, produce this exact block:
 Q<number>: [exact question text as printed/written — e.g. Q1a, Q2, Q3b]
-MARKS AVAILABLE: [number shown in brackets e.g. [2 marks] — write the number only]
+MARKS AVAILABLE: [marks allocated to this question or sub-question. Look for a number inside square brackets printed at the END of the question line or in the RIGHT margin e.g. [2], [3 marks], (2). Also check inside the answer workspace box or lines — some scripts print the mark allocation there as [X marks]. Write the numeric value only e.g. 2. If truly absent write 0]
 STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work]
-MARKS AWARDED: [count ticks for correct marks, crosses for wrong; circled number = marks given; blank = not yet marked. Write the number e.g. "2" or "0" or "unmarked". IMPORTANT: if the teacher has written "0" in a different ink, record 0 — unless the 0 is crossed out/corrected or there is an additive note like (+1), in which case record the corrected value]
+MARKS AWARDED: [marks the teacher has given this question. Look for: ticks (each tick = 1 mark unless otherwise indicated), crosses, a circled or boxed number written by the teacher, a fraction like 1/2, or a number in a different ink or colour. Count all ticks visible. A circled or boxed number overrides tick count — use that number. If the teacher wrote 0, record 0 unless it is crossed out and replaced. If blank and no marks visible, write "unmarked". Write a numeric value only e.g. 2 or 0]
 TEACHER NOTE: [corrections or comments in different ink, or "none"]
 CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
 
@@ -836,7 +825,6 @@ async function ollamaStream(url, model, prompt, isVision, imageB64, timeoutMs) {
 function parseJSON(raw) {
   if (!raw) throw new Error('Empty AI response');
 
-  // Step 1: Strip markdown fences, normalize unicode quotes, extract outermost {}
   function extractAndNormalize(s) {
     s = s.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
     s = s.replace(/\u201c|\u201d|\u2033|\u02BA/g,'"').replace(/\u2018|\u2019|\u02BC|\u0060/g,"'");
@@ -844,20 +832,13 @@ function parseJSON(raw) {
     return (start !== -1 && end > start) ? s.slice(start, end + 1) : s;
   }
 
-  // Step 2: Quick try after basic cleanup
   const s = extractAndNormalize(raw);
   try { return JSON.parse(s); } catch (_) {}
 
-  // Step 3: State-machine repair — walks char-by-char so it handles every edge case:
-  //   - Unescaped double-quotes inside string values
-  //   - Raw newlines / tabs inside strings
-  //   - Invalid backslash escapes
-  //   - Math/unicode symbols inside strings
-  //   - Trailing commas
   function repairJSON(src) {
     src = src.replace(/^\uFEFF/, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
     src = src.replace(/\u201c|\u201d|\u2033|\u02BA/g, '"').replace(/\u2018|\u2019|\u02BC/g, "'");
-    src = src.replace(/,(\s*[}\]])/g, '$1'); // trailing commas
+    src = src.replace(/,(\s*[}\]])/g, '$1');
 
     const MATH = {'²':'^2','³':'^3','⁴':'^4','√':'sqrt','±':'+/-','×':'*','÷':'/','π':'pi','≤':'<=','≥':'>=','≠':'!=','°':' degrees','…':'...'};
 
@@ -865,58 +846,44 @@ function parseJSON(raw) {
     while (i < src.length) {
       const ch = src[i];
       if (!inStr) {
-        // Outside a string: copy as-is, flip flag when we open a string
         out += ch; i++;
         if (ch === '"') inStr = true;
       } else {
         if (ch === '\\') {
-          // Backslash: keep valid escapes, double-escape invalid ones
           const nx = src[i + 1] || '';
           if ('"\\\/bfnrtu'.includes(nx)) { out += ch + nx; i += 2; }
           else { out += '\\\\'; i++; }
         } else if (ch === '"') {
-          // Could be the closing quote OR an embedded unescaped quote.
-          // Strategy: skip whitespace (but NOT newlines — newlines inside strings
-          // are already invalid JSON, so they can't be part of the structural gap)
-          // then look at the next structural character.
           let j = i + 1;
           while (j < src.length && (src[j] === ' ' || src[j] === '\t')) j++;
           const after = src[j] || '';
           if (':,}]'.includes(after) || j >= src.length) {
-            // Genuine closing quote
             out += '"'; inStr = false; i++;
           } else if (src[j] === '\r' || src[j] === '\n') {
-            // Newline right after quote — almost certainly the real end of this string
-            // (the newline is outside, between key-value pairs)
             out += '"'; inStr = false; i++;
           } else {
-            // Embedded unescaped quote — escape it
             out += '\\"'; i++;
           }
         } else if (ch === '\n' || ch === '\r') {
-          // Raw newline inside a string value → replace with space
           out += ' '; i++;
         } else if (ch === '\t') {
           out += ' '; i++;
         } else {
-          // Replace math/unicode symbols with ASCII equivalents
           const repl = MATH[ch];
           if (repl !== undefined) { out += repl; i++; }
-          else if (ch > '\x7E') { out += ' '; i++; } // non-ASCII → space
+          else if (ch > '\x7E') { out += ' '; i++; }
           else { out += ch; i++; }
         }
       }
     }
-    if (inStr) out += '"'; // close any unclosed string
+    if (inStr) out += '"';
 
-    // Clean up double-spaces that crept into string values
     out = out.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g, (m, inner) => '"' + inner.replace(/ {2,}/g, ' ') + '"');
     return out;
   }
 
-  // Step 4: Close truncated structures (e.g. model output was cut off mid-array)
   function closeTruncated(r) {
-    r = r.replace(/,\s*\{[^}]*$/, ''); // remove dangling incomplete object
+    r = r.replace(/,\s*\{[^}]*$/, '');
     r = r.replace(/,?\s*$/, '');
     let ob=0,cb=0,oa=0,ca=0;
     for (const c of r) { if(c==='{')ob++; if(c==='}')cb++; if(c==='[')oa++; if(c===']')ca++; }
@@ -928,7 +895,6 @@ function parseJSON(raw) {
   const repaired = repairJSON(s);
   try { return JSON.parse(repaired); } catch (e) {
     try { return JSON.parse(closeTruncated(repaired)); } catch (_) {}
-    // Last resort: re-extract from raw in case earlier slicing was wrong
     try {
       const m = raw.match(/\{[\s\S]+\}/);
       if (m) return JSON.parse(closeTruncated(repairJSON(m[0])));
@@ -1196,7 +1162,7 @@ RULES FOR questions array:
 - If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
 - questionText: a brief (max 12 word) description of what the question asks — taken directly from the exam
 - topic: which curriculum topic this question tests
-- marksAvailable: marks shown in brackets for this specific question or sub-question in the exam
+- marksAvailable: marks allocated to this question or sub-question. Find the number in square brackets at the end of the question line or in the margin e.g. [2], [3 marks]. Also check inside answer workspaces — marks are sometimes printed there as [X marks]. Use the per-sub-question value, not the total
 - marksAwarded: marks the student actually received for this specific question or sub-question (count ticks, read circled scores)
 - TEACHER MARK RULE: if the teacher has written a mark in different ink and it is 0, treat marksAwarded as 0 (the answer is wrong) — UNLESS the 0 has been crossed out and replaced, or there is an explicit additive annotation such as (+1)
 - Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
@@ -1214,6 +1180,29 @@ RULES FOR topicPerformance:
   } catch(e) {
     document.getElementById('analysis-content').innerHTML = errCard('Analysis failed: ' + e.message);
   }
+}
+
+// ── FORMAT HELPERS ──
+function _parseQ(id) {
+  const m = String(id).match(/^(\d+)([a-z]?)(?:\(([ivxlcdm]+)\))?/i);
+  if (!m) return [0,'',0];
+  const romanMap={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10};
+  const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
+  return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
+}
+// Format question number for display: "1a" → "Q1(a)", "2" → "Q2"
+function fmtQ(num) {
+  const s = String(num || '').replace(/^Q/i, '');
+  const m = s.match(/^(\d+)([a-zA-Z]+)/);
+  if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
+  return 'Q' + s;
+}
+// Format a label that may already start with "Q": "Q1a" → "Q1(a)"
+function fmtQLabel(label) {
+  const s = String(label || '');
+  const m = s.match(/^Q(\d+)([a-zA-Z]+)/i);
+  if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
+  return s;
 }
 
 function renderAnalysis(d) {
@@ -1253,7 +1242,7 @@ function renderAnalysis(d) {
                 const pct = q.marksAvailable > 0 ? Math.round((q.marksAwarded / q.marksAvailable) * 100) : 0;
                 const col = pct >= 70 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
                 return `<tr>
-                  <td style="font-weight:700;color:var(--teal)">Q${q.number}</td>
+                  <td style="font-weight:700;color:var(--teal)">${fmtQ(q.number)}</td>
                   <td style="font-size:12px;color:var(--text-2);max-width:200px">${q.questionText||'–'}</td>
                   <td><span class="tag" style="font-size:11px">${q.topic||'–'}</span></td>
                   <td style="text-align:center">${q.marksAvailable}</td>
@@ -1375,14 +1364,6 @@ Return this exact JSON structure:
   }
 }
 
-function _parseQ(id) {
-  const m = String(id).match(/^(\d+)([a-z]?)(?:\(([ivxlcdm]+)\))?/i);
-  if (!m) return [0,'',0];
-  const romanMap={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10};
-  const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
-  return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
-}
-
 function renderReport(r) {
   const d  = APP.analysis || {};
   const sc = d.overallScore || 0;
@@ -1426,7 +1407,7 @@ function renderReport(r) {
       ?`<span class="qb-badge" style="background:var(--cream);color:var(--text-3)">— No attempt</span>`
       :`<span class="qb-badge qb-concept">✗ Concept</span>`;
     return `<tr>
-      <td style="font-weight:700;color:var(--teal)">${q.question||''}</td>
+      <td style="font-weight:700;color:var(--teal)">${fmtQLabel(q.question||'')}</td>
       <td>${q.topic||''}</td>
       <td style="text-align:center">${q.marks||''}</td>
       <td style="text-align:center;font-weight:600">${q.score||''}</td>
@@ -1510,7 +1491,6 @@ async function runPlan() {
   const d = APP.analysis;
   if (!d) { document.getElementById('plan-content').innerHTML = errCard('Analysis not complete.'); return; }
 
-  // Sanitize all embedded strings to prevent apostrophes and special chars breaking JSON
   function safeStr(s) { return (s||'').replace(/'/g,'').replace(/"/g,'').replace(/[^\x20-\x7E]/g,' ').trim(); }
 
   const studentName = safeStr(APP.studentName);
@@ -1558,7 +1538,6 @@ ${mathPlanExtras()}`;
     APP.plan  = parseJSON(raw);
     renderPlan(APP.plan);
   } catch(e) {
-    // Retry with a simpler, shorter prompt
     try {
       document.getElementById('plan-content').innerHTML =
         `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Retrying with simpler plan…</div></div>`;
