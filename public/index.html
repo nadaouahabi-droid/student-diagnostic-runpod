@@ -421,7 +421,7 @@ async function handleFiles(files) {
     } else if (isImg) {
       try {
         // ── CHANGE 4: boosted upload resolution ──
-        const b64 = await compressImageFile(f, 2000, 0.92);
+        const b64 = await compressImageFile(f, 1800, 0.92);
         APP.images.push({ base64: b64, mimeType: 'image/jpeg', name: f.name });
       } catch(e) {
         showUploadError(`Could not load image "${f.name}": ${e.message}`);
@@ -557,8 +557,7 @@ async function handlePDF(file) {
     for (let p = 1; p <= pdf.numPages; p++) {
       prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
       const page = await pdf.getPage(p);
-      // ── CHANGE 2: boosted PDF render scale 1.8 → 2.5 ──
-      const viewport = page.getViewport({ scale: 2.5 });
+      const viewport = page.getViewport({ scale: 2.0 });
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
@@ -566,8 +565,7 @@ async function handlePDF(file) {
       // ── CHANGE 2: apply preprocessing before compression ──
       applyOCRPreprocessing(canvas);
       APP.images.push({
-        // ── CHANGE 2: boosted max resolution 1600 → 2400 ──
-        base64:   compressCanvas(canvas, 2400, 0.92),
+        base64:   compressCanvas(canvas, 2000, 0.92),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
@@ -710,7 +708,7 @@ async function splitImageIntoTiles(image, numTiles) {
         c.height = (i === numTiles - 1) ? (img.height - tileH * i) : tileH;
         c.getContext('2d').drawImage(img, 0, i * tileH, img.width, c.height, 0, 0, img.width, c.height);
         applyOCRPreprocessing(c);
-        tiles.push(compressCanvas(c, 1800, 0.92));
+        tiles.push(compressCanvas(c, 1600, 0.92));
       }
       resolve(tiles);
     };
