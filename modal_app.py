@@ -1,44 +1,76 @@
 import modal
 
-app = modal.App("ocr-app")
+app = modal.App("learndiag-ocr")
 
 image = (
     modal.Image.debian_slim()
     .pip_install(
         "paddleocr==2.7.3",
-        "paddlepaddle==2.6.2", 
+        "paddlepaddle==2.6.2",
         "numpy==1.26.4",
         "opencv-python-headless==4.8.1.78",
-        "transformers==4.41.2",
-        "torch==2.2.0",
         "pillow",
-        "fastapi[standard]"
+        "fastapi[standard]",
     )
 )
 
-@app.function(
+# ── Shared OCR model (loaded once per container) ──────────────────────────────
+@app.cls(
     image=image,
-    gpu="T4",               # or "A10G"
-    timeout=300,
-    scaledown_window=300    # reduce cold start impact
+    gpu="T4",
+    timeout=600,
+    scaledown_window=300,
 )
-@modal.web_endpoint(method="POST")
-def ocr_endpoint(data: dict):
-    import base64, io
-    import numpy as np
-    from PIL import Image
-    from paddleocr import PaddleOCR
+class OCRService:
+    @modal.enter()
+    def load_model(self):
+        from paddleocr import PaddleOCR
+        self.ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
 
-    # Lazy load
-    global ocr
-    if "ocr" not in globals():
-        ocr = PaddleOCR(use_angle_cls=True, lang="en")
+    @modal.method()
+    def run_ocr(self, image_b64: str) -> dict:
+        import base64, io
+        import numpy as np
+        from PIL import Image
 
-    img_b64 = data["image"]
-    img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert("RGB")
+        img = Image.open(
+            io.BytesIO(base64.b64decode(image_b64))
+        ).convert("RGB")
+        result = self.ocr.ocr(np.array(img))
+        lines = []
+        if result and result[0]:
+            lines = [line[1][0] for line in result[0]]
+        return {"text": "\n".join(lines), "success": True}
 
-    result = ocr.ocr(np.array(img))
 
-    text = "\n".join([line[1][0] for line in result[0]])
+# ── OCR batch endpoint (called by Vercel proxy) ───────────────────────────────
+@app.function(image=image, timeout=600)
+@modal.web_endpoint(method="POST", label="ocr-batch")
+def ocr_batch(data: dict):
+    """
+    Expects: { "images": ["base64...", ...], "refine_threshold": 0.72 }
+    Returns: { "success": true, "pages": [{"text": "..."}], "combined_text": "..." }
+    """
+    images = data.get("images", [])
+    service = OCRService()
+    pages = []
+    for b64 in images:
+        try:
+            result = service.run_ocr.remote(b64)
+            pages.append(result)
+        except Exception as e:
+            pages.append({"text": "", "success": False, "error": str(e)})
 
-    return {"text": text}
+    combined = "\n\n".join(p.get("text", "") for p in pages)
+    return {
+        "success": True,
+        "pages": pages,
+        "combined_text": combined,
+    }
+
+
+# ── Health check ──────────────────────────────────────────────────────────────
+@app.function(image=image)
+@modal.web_endpoint(method="GET", label="health")
+def health():
+    return {"status": "ok"}
