@@ -6,7 +6,7 @@ image = (
     modal.Image.debian_slim()
     .pip_install(
         "paddleocr==2.7.3",
-        "paddlepaddle==2.6.0",
+        "paddlepaddle==2.6.2", 
         "numpy==1.26.4",
         "opencv-python-headless==4.8.1.78",
         "transformers==4.41.2",
