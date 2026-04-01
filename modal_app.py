@@ -11,7 +11,8 @@ image = (
         "opencv-python-headless==4.8.1.78",
         "transformers==4.41.2",
         "torch==2.2.0",
-        "pillow"
+        "pillow",
+        "fastapi[standard]"
     )
 )
 
