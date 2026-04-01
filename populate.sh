@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Populate RunPod Network Volume with all models (FIXED VERSION)
+# Populate RunPod Network Volume (MATCH DOCKERFILE v2.7.3)
 # ============================================================
 set -e
 
@@ -8,179 +8,122 @@ echo "=== Checking volume is mounted ==="
 df -h | grep runpod || { echo "ERROR: /runpod-volume not mounted"; exit 1; }
 
 # ------------------------------------------------------------
-# 0. Environment variables
+# 0. Environment variables (MATCH DOCKERFILE)
 # ------------------------------------------------------------
 export HF_HOME=/runpod-volume/hf-cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME
 export OLLAMA_MODELS=/runpod-volume/ollama-models
-export PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
+
+export PADDLE_HOME=/runpod-volume/paddle-cache
+export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
 
 mkdir -p $HF_HOME
 mkdir -p $OLLAMA_MODELS
-mkdir -p $PADDLEX_HOME/fonts           # ✅ FIX: fonts must live inside PADDLEX_HOME
+mkdir -p $PADDLEOCR_HOME
 
 # ------------------------------------------------------------
-# 1. Ollama models
+# 1. Python 3.10 + env
 # ------------------------------------------------------------
-echo ""
-echo "=== Installing Ollama ==="
-curl -fsSL https://ollama.com/install.sh | sh
+echo "=== Setting up Python ==="
+apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-distutils wget
 
-echo "=== Stopping any auto-started Ollama service ==="
-systemctl stop ollama 2>/dev/null || true
-systemctl disable ollama 2>/dev/null || true
-pkill ollama 2>/dev/null || true
-sleep 3
-
-echo "=== Starting Ollama with correct model path ==="
-OLLAMA_MODELS=/runpod-volume/ollama-models ollama serve &
-OLLAMA_PID=$!
-
-echo "=== Waiting for Ollama to be ready ==="
-for i in $(seq 1 20); do
-  ollama list &>/dev/null && echo "  Ollama ready after ${i}s" && break
-  echo "  Waiting... ($i/20)"
-  sleep 2
-done
-
-echo "=== Pulling Ollama models ==="
-OLLAMA_MODELS=/runpod-volume/ollama-models ollama pull qwen2.5vl:7b-q8_0
-OLLAMA_MODELS=/runpod-volume/ollama-models ollama pull qwen2.5:7b-instruct-q4_K_M
-
-echo "=== Verifying Ollama models ==="
-ollama list
-
-echo "=== Verifying Ollama storage path ==="
-if ls /runpod-volume/ollama-models/manifests/registry.ollama.ai/library/ &>/dev/null; then
-  echo "✅ Ollama models confirmed on volume:"
-  ls -lh /runpod-volume/ollama-models/manifests/registry.ollama.ai/library/
-else
-  echo "❌ ERROR: Ollama models NOT found on volume! Aborting."
-  kill $OLLAMA_PID 2>/dev/null || true
-  exit 1
-fi
-
-if [ -d "/root/.ollama/models" ] && [ "$(ls -A /root/.ollama/models 2>/dev/null)" ]; then
-  echo "⚠️  WARNING: Files found in default /root/.ollama/models — possible leak!"
-  du -sh /root/.ollama/models
-fi
-
-kill $OLLAMA_PID 2>/dev/null || true
-sleep 2
-
-# ------------------------------------------------------------
-# 2. Python 3.10 environment
-# ------------------------------------------------------------
-echo ""
-echo "=== Setting up Python 3.10 ==="
-apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-distutils wget ccache
 python3.10 -m venv /tmp/venv
 source /tmp/venv/bin/activate
+
 pip install --upgrade pip setuptools wheel
 
 # ------------------------------------------------------------
-# 3. PaddleOCR
+# 2. Install EXACT SAME versions as Dockerfile
 # ------------------------------------------------------------
-echo ""
-echo "=== Installing PaddleOCR ==="
-pip install paddleocr==3.0.0 paddlepaddle==3.0.0 Pillow numpy --quiet
+echo "=== Installing PaddleOCR stack (MATCHED) ==="
 
-echo "=== Downloading PaddleOCR weights (to default /root/.paddlex) ==="
-# Do NOT set PADDLEX_HOME here — let PaddleOCR write to its hardcoded default
-# We copy to the volume after download is complete
-FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 -c "
+pip install \
+    torch==2.2.0 \
+    paddlepaddle==2.6.0 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+    paddleocr==2.7.3 \
+    opencv-python-headless==4.8.1.78 \
+    transformers==4.41.2 \
+    sentencepiece \
+    Pillow \
+    numpy==1.26.4 \
+    --quiet
+
+# ------------------------------------------------------------
+# 3. Download PaddleOCR models (PP-OCRv3)
+# ------------------------------------------------------------
+echo "=== Downloading PaddleOCR v2.7.3 models ==="
+
+FLAGS_use_mkldnn=0 PADDLE_DISABLE_MKLDNN=1 python3 - <<EOF
 from paddleocr import PaddleOCR
 from PIL import Image
+
+print("Downloading PaddleOCR models...")
+
+# trigger model download
+ocr = PaddleOCR(use_angle_cls=True, lang="en")
+
 img = Image.new('RGB', (200, 50), color='white')
 img.save('/tmp/test.png')
-ocr = PaddleOCR(use_textline_orientation=True, lang='en', device='cpu')
-ocr.predict('/tmp/test.png')
-print('PaddleOCR weights downloaded successfully')
-"
 
-echo "=== Verifying weights in default path ==="
-EXPECTED_MODELS="PP-LCNet_x0_25_textline_ori PP-LCNet_x1_0_doc_ori PP-OCRv5_mobile_det PP-OCRv5_mobile_rec UVDoc"
-for model in $EXPECTED_MODELS; do
-  if [ -f "/root/.paddlex/official_models/$model/inference.pdiparams" ]; then
-    echo "  ✅ $model"
-  else
-    echo "  ❌ MISSING: $model"
-    exit 1
-  fi
-done
+ocr.ocr('/tmp/test.png')
 
-echo "=== Copying PaddleOCR weights to volume ==="
-mkdir -p /runpod-volume/paddle-cache/.paddlex
-cp -r /root/.paddlex/official_models /runpod-volume/paddle-cache/.paddlex/
+print("Download complete.")
+EOF
 
-echo "=== Verifying weights on volume ==="
-for model in $EXPECTED_MODELS; do
-  if [ -f "/runpod-volume/paddle-cache/.paddlex/official_models/$model/inference.pdiparams" ]; then
-    echo "  ✅ $model"
-  else
-    echo "  ❌ MISSING on volume: $model"
-    exit 1
-  fi
-done
-echo "✅ All PaddleOCR weights confirmed on volume"
-
-echo "=== Pre-downloading PaddleOCR fonts into PADDLEX_HOME ==="
-mkdir -p /runpod-volume/paddle-cache/.paddlex/fonts
-FONT_BASE="https://paddle-model-ecology.bj.bcebos.com/paddlex/PaddleX3.0/fonts"
-wget -q "$FONT_BASE/PingFang-SC-Regular.ttf" -O /runpod-volume/paddle-cache/.paddlex/fonts/PingFang-SC-Regular.ttf
-wget -q "$FONT_BASE/simfang.ttf"              -O /runpod-volume/paddle-cache/.paddlex/fonts/simfang.ttf
-
-echo "✅ Fonts confirmed:"
-ls -lh /runpod-volume/paddle-cache/.paddlex/fonts/
 # ------------------------------------------------------------
-# 4. TrOCR (HuggingFace)
+# 4. Verify PaddleOCR cache
 # ------------------------------------------------------------
-echo ""
-echo "=== Installing Transformers ==="
-pip install transformers torch sentencepiece --quiet
+echo "=== Verifying PaddleOCR cache ==="
 
-echo "=== Downloading TrOCR weights ==="
-# ✅ FIX: HF_HOME env var is set — from_pretrained without cache_dir
-# will write to HF_HOME/hub/ automatically
-HF_HOME=$HF_HOME python3 -c "
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-ckpt = 'microsoft/trocr-large-handwritten'
-TrOCRProcessor.from_pretrained(ckpt)
-VisionEncoderDecoderModel.from_pretrained(ckpt)
-print('TrOCR weights downloaded successfully')
-"
-
-echo "TrOCR contents:"
-ls $HF_HOME/hub/
-
-if [ "$(ls -A $HF_HOME/hub/ 2>/dev/null)" ]; then
-  echo "✅ TrOCR weights confirmed on volume at HF_HOME/hub/"
+if [ -d "$PADDLEOCR_HOME" ] && [ "$(ls -A $PADDLEOCR_HOME)" ]; then
+    echo "✅ PaddleOCR models present:"
+    ls -lh $PADDLEOCR_HOME
 else
-  echo "❌ ERROR: TrOCR weights NOT found on volume!"
-  exit 1
+    echo "❌ ERROR: PaddleOCR models missing"
+    exit 1
 fi
 
 # ------------------------------------------------------------
-# 5. Final verification
+# 5. TrOCR (MATCH Dockerfile)
+# ------------------------------------------------------------
+echo "=== Downloading TrOCR ==="
+
+python3 - <<EOF
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+ckpt = "microsoft/trocr-large-handwritten"
+
+print("Downloading TrOCR...")
+
+TrOCRProcessor.from_pretrained(ckpt)
+VisionEncoderDecoderModel.from_pretrained(ckpt)
+
+print("TrOCR ready.")
+EOF
+
+# ------------------------------------------------------------
+# 6. Verify HF cache
+# ------------------------------------------------------------
+echo "=== Verifying HuggingFace cache ==="
+
+if [ "$(ls -A $HF_HOME 2>/dev/null)" ]; then
+    echo "✅ HF cache ready"
+    ls $HF_HOME
+else
+    echo "❌ ERROR: HF cache empty"
+    exit 1
+fi
+
+# ------------------------------------------------------------
+# 7. Final check
 # ------------------------------------------------------------
 echo ""
 echo "=== FINAL STRUCTURE ==="
-find /runpod-volume -maxdepth 4 -type d
+find /runpod-volume -maxdepth 3 -type d
 
 echo ""
 echo "=== DISK USAGE ==="
 du -sh /runpod-volume/*
 
 echo ""
-echo "=== TOTAL SIZE ==="
-du -sh /runpod-volume
-
-echo ""
-echo "=== FINAL SANITY CHECK ==="
-echo -n "Ollama models:     "; ls /runpod-volume/ollama-models/manifests/registry.ollama.ai/library/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "PaddleOCR models:  "; ls $PADDLEX_HOME/official_models/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "PaddleOCR fonts:   "; ls $PADDLEX_HOME/fonts/ 2>/dev/null | tr '\n' ' ' && echo ""
-echo -n "HuggingFace cache: "; ls $HF_HOME/hub/ 2>/dev/null | tr '\n' ' ' && echo ""
-
-echo ""
-echo "✅ Volume populated successfully. You can now terminate this pod."
+echo "✅ Volume ready (MATCHED with Dockerfile)"
