@@ -524,13 +524,14 @@ function renderPreviews() {
     + '<button class="thumb-rm" onclick="removeImg(' + i + ')">✕</button>'
     + '<div class="thumb-lbl">' + (img.name||'Page '+(i+1)) + '</div></div>'
   ).join('');
+
   if (!APP.images.length && !APP.pdfData) { el.innerHTML = ''; return; }
   const badge = APP.pdfName
-    ? `<div style="margin-bottom:8px"><span style="background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin:2px">📄 ${APP.pdfName}</span></div>`
+    ? '<div style="margin-bottom:8px"><span style="background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin:2px">📄 ' + APP.pdfName + '</span></div>'
     : '';
   const thumbs = APP.images.length
     ? '<div style="margin-top:8px;margin-bottom:4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3)">'
-      + APP.images.length + ' page' + (APP.images.length>1?'s':'') + '</div>'
+      + APP.images.length + ' page' + (APP.images.length > 1 ? 's' : '') + '</div>'
       + '<div class="thumb-grid">' + thumbItems + '</div>'
     : '';
   el.innerHTML = badge + thumbs;
