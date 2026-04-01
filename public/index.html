@@ -10,6 +10,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
+  /* ── Primary palette ── */
   --navy:#0d1b2a;--navy-2:#152336;--navy-3:#1d3149;
   --teal:#00b4a6;--teal-dim:#007f75;--teal-light:#e0f7f5;
   --amber:#f0a500;--amber-light:#fff8e6;
@@ -19,6 +20,7 @@
   --text:#1a2332;--text-2:#4a5568;--text-3:#8896aa;
   --border:rgba(0,0,0,0.08);--border-strong:rgba(0,0,0,0.14);
   --radius:10px;--radius-lg:16px;--shadow:0 2px 12px rgba(0,0,0,0.07);
+  /* ── Compatibility aliases (used in JS-generated inline HTML) ── */
   --surface:white;--surface2:var(--cream);--surface3:var(--cream-dim);
   --text2:var(--text-2);--text3:var(--text-3);
   --bd:var(--border);--bd2:var(--border-strong);
@@ -33,9 +35,11 @@
   --ease:cubic-bezier(0.4,0,0.2,1);
 }
 
+/* ── BASE ── */
 html{scroll-behavior:smooth}
 body{font-family:'DM Sans',system-ui,sans-serif;background:#f0ece4;color:var(--text);min-height:100vh;font-size:15px;line-height:1.6}
 
+/* ── NAV ── */
 nav{background:var(--navy);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,0.3)}
 .nav-brand{display:flex;align-items:center;gap:10px;color:white;font-family:'DM Serif Display',serif;font-size:18px}
 .nav-icon{width:32px;height:32px;background:var(--teal);border-radius:8px;display:flex;align-items:center;justify-content:center}
@@ -50,15 +54,18 @@ nav{background:var(--navy);padding:0 2rem;display:flex;align-items:center;justif
 .status-dot.ok{background:var(--teal)}
 .status-dot.checking{background:var(--amber);animation:pulse 1s infinite}
 
+/* ── ANIMATIONS ── */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
+/* ── LAYOUT ── */
 .page{display:none}
 .page.active{display:block;animation:fadeUp 0.25s var(--ease)}
 .container{max-width:860px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
 .container-wide{max-width:1020px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
 
+/* ── HERO ── */
 .hero{background:var(--navy);padding:3.5rem 2rem 2.5rem;text-align:center;position:relative;overflow:hidden}
 .hero::before{content:'';position:absolute;top:-60px;left:-60px;width:220px;height:220px;background:radial-gradient(circle,rgba(0,180,166,0.15) 0%,transparent 70%);pointer-events:none}
 .hero::after{content:'';position:absolute;bottom:-80px;right:-40px;width:300px;height:300px;background:radial-gradient(circle,rgba(240,165,0,0.08) 0%,transparent 70%);pointer-events:none}
@@ -66,10 +73,12 @@ nav{background:var(--navy);padding:0 2rem;display:flex;align-items:center;justif
 .hero h1 em{color:var(--teal);font-style:normal}
 .hero-sub{color:rgba(255,255,255,0.55);font-size:15px;max-width:520px;margin:0 auto 1.5rem;position:relative;z-index:1}
 
+/* ── CARDS ── */
 .card{background:white;border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);padding:1.5rem;margin-bottom:1.25rem}
 .card-title{font-size:14px;font-weight:600;margin-bottom:1rem;color:var(--text);display:flex;align-items:center;gap:8px}
 .card-title-icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
 
+/* ── FORMS ── */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
 .form-field{margin-bottom:1rem}
 .form-label{display:block;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
@@ -78,6 +87,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
 textarea{min-height:220px;resize:vertical;line-height:1.65;font-size:13px}
 select{cursor:pointer}
 
+/* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:var(--radius);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:1.5px solid transparent;transition:all 0.15s;white-space:nowrap}
 .btn:active{transform:scale(0.98)}
 .btn-primary{background:var(--teal);color:white;border-color:var(--teal);box-shadow:0 2px 8px rgba(0,180,166,0.25)}
@@ -89,12 +99,14 @@ select{cursor:pointer}
 .btn-navy:hover{background:var(--navy-2)}
 .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 
+/* ── MODE TOGGLE ── */
 .mode-toggle{display:flex;gap:0;margin-bottom:1rem;border:1.5px solid var(--border-strong);border-radius:var(--radius);overflow:hidden}
 .mode-btn{flex:1;padding:9px 14px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;border:none;background:white;color:var(--text-3);cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:7px}
 .mode-btn:not(:last-child){border-right:1.5px solid var(--border-strong)}
 .mode-btn.active{background:var(--navy);color:white}
 .mode-btn:hover:not(.active){background:var(--cream);color:var(--text)}
 
+/* ── UPLOAD ── */
 .upload-zone{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:2.5rem 1.5rem;text-align:center;cursor:pointer;transition:all 0.2s;background:white;position:relative}
 .upload-zone:hover,.upload-zone.drag-over{border-color:var(--teal);background:var(--teal-light)}
 .upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -111,12 +123,14 @@ select{cursor:pointer}
 .thumb-rm:hover{background:var(--red)}
 .thumb-lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:10px;padding:3px 5px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+/* ── METRICS ── */
 .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
 .metric-card{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;box-shadow:var(--shadow)}
 .metric-label{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
 .metric-val{font-family:'DM Serif Display',serif;font-size:28px;line-height:1}
 .mv-red{color:var(--red)}.mv-green{color:var(--green)}.mv-amber{color:var(--amber)}.mv-teal{color:var(--teal)}.mv-navy{color:var(--navy)}
 
+/* ── TOPIC ROWS ── */
 .topic-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
 .topic-row:last-child{border-bottom:none}
 .topic-name{flex:1.2;font-size:13px;font-weight:500}
@@ -128,10 +142,12 @@ select{cursor:pointer}
 .chip-a{background:var(--amber-light);color:#b07800}
 .chip-g{background:var(--green-light);color:#1a7a50}
 
+/* ── MISTAKES ── */
 .mistake-card{border-radius:var(--radius);border-left:3px solid var(--red);background:var(--red-light);padding:10px 14px;margin-bottom:8px}
 .mistake-title{font-size:13px;font-weight:600;color:var(--red);margin-bottom:3px}
 .mistake-desc{font-size:12px;color:var(--text-2);line-height:1.55}
 
+/* ── STEP LIST ── */
 .step-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
 .step-item:last-child{border-bottom:none}
 .step-badge{width:32px;height:32px;min-width:32px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
@@ -140,11 +156,13 @@ select{cursor:pointer}
 .step-desc{font-size:13px;color:var(--text-2);margin-bottom:6px;line-height:1.55}
 .milestone{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--teal-dim);font-weight:600;background:var(--teal-light);padding:3px 10px;border-radius:20px;margin-top:4px}
 
+/* ── LOADING ── */
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;text-align:center;gap:0}
 .spinner{width:36px;height:36px;border:3px solid var(--cream-dim);border-top-color:var(--teal);border-radius:50%;animation:spin 0.75s linear infinite;margin-bottom:1rem}
 .loading-text{font-size:14px;color:var(--text-3);font-weight:500}
 .loading-sub{font-size:12px;color:var(--text-3);margin-top:4px;opacity:0.7}
 
+/* ── PAGE PROGRESS ── */
 .page-progress{width:100%;max-width:340px;margin-top:14px}
 .pp-label{font-size:11px;color:var(--text-3);margin-bottom:5px;text-align:center}
 .pp-bar-wrap{height:5px;background:var(--cream-dim);border-radius:3px;overflow:hidden}
@@ -154,14 +172,17 @@ select{cursor:pointer}
 .pp-dot.done{background:var(--teal);border-color:var(--teal)}
 .pp-dot.active{background:var(--amber);border-color:var(--amber);animation:pulse 1s infinite}
 
+/* ── TAGS / CHIPS ── */
 .tag{display:inline-block;font-size:12px;padding:3px 10px;background:var(--cream);color:var(--text-2);border-radius:20px;margin:2px}
 .tag-g{background:var(--green-light);color:#1a7a50}
 .tag-r{background:var(--red-light);color:var(--red)}
 
+/* ── SECTION HEADER ── */
 .section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px}
 .section-hd h2{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;color:var(--navy)}
 .section-hd p{font-size:13px;color:var(--text-3)}
 
+/* ── ALERTS ── */
 .alert-danger{background:var(--red-light);border:1px solid rgba(224,76,76,0.2);border-left:3px solid var(--red);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
 .alert-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px}
 .alert-item{font-size:13px;color:var(--text-2);padding:2px 0}
@@ -169,12 +190,14 @@ select{cursor:pointer}
 .info-box.teal{background:var(--teal-light);border-color:rgba(0,180,166,0.25);color:#005c55}
 .info-box.green{background:var(--green-light);border-color:rgba(40,168,112,0.25);color:#1a5c3a}
 
+/* ── RESULT HEADER ── */
 .result-header{background:var(--navy);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .result-header-info h3{font-family:'DM Serif Display',serif;font-size:20px;color:white;font-weight:400;margin-bottom:4px}
 .result-header-info p{font-size:13px;color:rgba(255,255,255,0.45)}
 .rhs-score .big{font-family:'DM Serif Display',serif;font-size:42px;line-height:1;color:white}
 .rhs-score .sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px;text-align:right}
 
+/* ── REPORT ── */
 .report-body{font-size:14px;color:var(--text-2);line-height:1.75}
 .report-body h3{font-family:'DM Serif Display',serif;font-size:17px;color:var(--navy);margin:1.25rem 0 0.5rem;font-weight:400}
 .report-body strong{font-weight:600;color:var(--text)}
@@ -196,6 +219,7 @@ select{cursor:pointer}
 .diag-value{font-weight:700;color:white}
 .diag-value.red{color:var(--red)}.diag-value.amber{color:var(--amber)}.diag-value.teal{color:var(--teal)}
 
+/* ── QUESTION BREAKDOWN TABLE ── */
 .qb-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:0.5rem}
 .qb-table th{background:var(--navy);color:rgba(255,255,255,0.7);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:9px 12px;text-align:left}
 .qb-table th:first-child{border-radius:8px 0 0 0}
@@ -208,13 +232,16 @@ select{cursor:pointer}
 .qb-careless{background:var(--amber-light);color:#7a5c00}
 .qb-concept{background:var(--red-light);color:var(--red)}
 
+/* ── CONCEPT GAPS ── */
 .concept-gap-item{padding:10px 14px;border-left:3px solid var(--red);background:var(--red-light);border-radius:0 var(--radius) var(--radius) 0;margin-bottom:8px}
 .concept-gap-topic{font-size:13px;font-weight:700;color:var(--red);margin-bottom:3px}
 .concept-gap-desc{font-size:12px;color:var(--text-2);line-height:1.55}
 
+/* ── FEEDBACK BLOCK ── */
 .feedback-block{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-3) 100%);border-radius:var(--radius-lg);padding:1.25rem}
 .feedback-text{font-size:14px;color:rgba(255,255,255,0.65);line-height:1.75}
 
+/* ── WORKSHEET ── */
 .ws-q{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
 .ws-q-header{display:flex;gap:12px}
 .ws-q-num{font-family:'DM Serif Display',serif;font-size:18px;color:var(--teal);min-width:28px}
@@ -247,6 +274,7 @@ select{cursor:pointer}
 .ws-result-sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:3px}
 .ws-checking{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-3);padding:14px}
 
+/* ── PRINT ── */
 @media print{
   nav,.no-print{display:none!important}
   .page{display:block!important}
@@ -256,6 +284,7 @@ select{cursor:pointer}
   .ws-textarea{border:1px solid #ccc!important;background:white!important}
 }
 
+/* ── RESPONSIVE ── */
 @media(max-width:640px){
   .form-grid{grid-template-columns:1fr}
   .metric-grid{grid-template-columns:1fr 1fr}
@@ -268,6 +297,7 @@ select{cursor:pointer}
 </head>
 <body>
 
+<!-- ═══ NAV ═══ -->
 <nav>
   <div class="nav-brand">
     <div class="nav-icon">
@@ -291,13 +321,15 @@ select{cursor:pointer}
   </div>
 </nav>
 
-<!-- INPUT PAGE -->
+<!-- ═══════ INPUT PAGE ═══════ -->
 <div id="page-input" class="page active">
   <div class="hero">
     <h1>Student <em>Diagnostic</em><br>System</h1>
   </div>
 
   <div class="container">
+
+    <!-- Student Info -->
     <div class="card">
       <div class="card-title">
         <div class="card-title-icon" style="background:rgba(0,180,166,0.12)">👤</div>
@@ -324,6 +356,7 @@ select{cursor:pointer}
       </div>
     </div>
 
+    <!-- Exam Input -->
     <div class="card">
       <div class="card-title">
         <div class="card-title-icon" style="background:rgba(240,165,0,0.12)">📋</div>
@@ -370,11 +403,13 @@ select{cursor:pointer}
   </div>
 </div>
 
+<!-- ═══ OTHER PAGES ═══ -->
 <div id="page-analysis"  class="page"><div class="container-wide"><div id="analysis-content"> <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-report"    class="page"><div class="container">     <div id="report-content">  <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-plan"      class="page"><div class="container-wide"><div id="plan-content">    <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-worksheet" class="page"><div class="container">     <div id="worksheet-content"><div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 
+<!-- ═══════════════════════════════════════════════════════ -->
 <script>
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -389,6 +424,7 @@ let APP = {
   completedPages: new Set(['input'])
 };
 
+// ── MODEL DEFAULTS (hardcoded — no UI panel needed) ──
 const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
@@ -420,8 +456,7 @@ async function handleFiles(files) {
       await handlePDF(f);
     } else if (isImg) {
       try {
-        // ── CHANGE 4: boosted upload resolution ──
-        const b64 = await compressImageFile(f, 1800, 0.92);
+        const b64 = await compressImageFile(f, 1400, 0.88);
         APP.images.push({ base64: b64, mimeType: 'image/jpeg', name: f.name });
       } catch(e) {
         showUploadError(`Could not load image "${f.name}": ${e.message}`);
@@ -448,7 +483,6 @@ async function fileToB64(file) {
     r.readAsDataURL(file);
   });
 }
-
 function compressCanvas(canvas, maxPx, quality) {
   maxPx = maxPx || 1000; quality = quality || 0.85;
   let w = canvas.width, h = canvas.height;
@@ -485,23 +519,20 @@ async function compressImageFile(file, maxPx, quality) {
   });
 }
 
-// ── CHANGE 1: OCR preprocessing — grayscale + contrast stretch + unsharp mask ──
 function applyOCRPreprocessing(canvas) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
   const src = ctx.getImageData(0, 0, w, h);
   const s = src.data;
 
-  // Convert to luminance
+  // Build grayscale + find percentile range for contrast stretch
   const lum = new Float32Array(w * h);
   for (let i = 0, p = 0; i < s.length; i += 4, p++) {
     lum[p] = 0.299 * s[i] + 0.587 * s[i + 1] + 0.114 * s[i + 2];
   }
-
-  // Find 2nd/98th percentile for contrast stretching (ignores outliers)
   const sorted = Float32Array.from(lum).sort();
-  const lo = sorted[Math.floor(w * h * 0.02)];
-  const hi = sorted[Math.floor(w * h * 0.98)];
+  const lo = sorted[Math.floor(w * h * 0.02)];  // 2nd percentile
+  const hi = sorted[Math.floor(w * h * 0.98)];  // 98th percentile
   const range = Math.max(1, hi - lo);
 
   // Contrast-stretched grayscale
@@ -510,7 +541,7 @@ function applyOCRPreprocessing(canvas) {
     gray[p] = Math.min(255, Math.max(0, (lum[p] - lo) / range * 255));
   }
 
-  // Unsharp mask: output = gray + strength * (gray - gaussian_blur)
+  // Unsharp mask: sharpened = gray + strength * (gray - blur)
   const strength = 0.7;
   const dst = ctx.createImageData(w, h);
   const d = dst.data;
@@ -520,21 +551,20 @@ function applyOCRPreprocessing(canvas) {
       let blurred = gray[p];
       if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
         blurred = (
-          gray[(y-1)*w + x-1] * 0.0625 + gray[(y-1)*w + x] * 0.125 + gray[(y-1)*w + x+1] * 0.0625 +
-          gray[ y   *w + x-1] * 0.125  + gray[ y   *w + x] * 0.25  + gray[ y   *w + x+1] * 0.125  +
-          gray[(y+1)*w + x-1] * 0.0625 + gray[(y+1)*w + x] * 0.125 + gray[(y+1)*w + x+1] * 0.0625
+          gray[(y - 1) * w + x - 1] * 0.0625 + gray[(y - 1) * w + x] * 0.125 + gray[(y - 1) * w + x + 1] * 0.0625 +
+          gray[y * w + x - 1]       * 0.125  + gray[p]                * 0.25  + gray[y * w + x + 1]       * 0.125 +
+          gray[(y + 1) * w + x - 1] * 0.0625 + gray[(y + 1) * w + x] * 0.125 + gray[(y + 1) * w + x + 1] * 0.0625
         );
       }
       const val = Math.min(255, Math.max(0, gray[p] + strength * (gray[p] - blurred)));
       const i4 = p * 4;
-      d[i4] = d[i4+1] = d[i4+2] = val;
-      d[i4+3] = 255;
+      d[i4] = d[i4 + 1] = d[i4 + 2] = val;
+      d[i4 + 3] = 255;
     }
   }
   ctx.putImageData(dst, 0, 0);
   return canvas;
 }
-
 async function handlePDF(file) {
   const prog = document.getElementById('pdf-progress');
   prog.style.display = 'block';
@@ -556,16 +586,14 @@ async function handlePDF(file) {
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     for (let p = 1; p <= pdf.numPages; p++) {
       prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
-      const page = await pdf.getPage(p);
+      const page     = await pdf.getPage(p);
       const viewport = page.getViewport({ scale: 2.0 });
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      // ── CHANGE 2: apply preprocessing before compression ──
-      applyOCRPreprocessing(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;   
       APP.images.push({
-        base64:   compressCanvas(canvas, 2000, 0.92),
+        base64:   compressCanvas(canvas, 1800, 0.92),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
@@ -695,28 +723,6 @@ async function runpodCall(input, timeoutMs = 600000) {
   }
 }
 
-// ── CHANGE 3: Smart page tiling helper ──
-async function splitImageIntoTiles(image, numTiles) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const tileH = Math.floor(img.height / numTiles);
-      const tiles = [];
-      for (let i = 0; i < numTiles; i++) {
-        const c = document.createElement('canvas');
-        c.width  = img.width;
-        c.height = (i === numTiles - 1) ? (img.height - tileH * i) : tileH;
-        c.getContext('2d').drawImage(img, 0, i * tileH, img.width, c.height, 0, 0, img.width, c.height);
-        applyOCRPreprocessing(c);
-        tiles.push(compressCanvas(c, 1600, 0.92));
-      }
-      resolve(tiles);
-    };
-    img.onerror = () => resolve([image.base64]);
-    img.src = 'data:' + image.mimeType + ';base64,' + image.base64;
-  });
-}
-
 // ── OCR PIPELINE ──
 async function callOCRPipeline(prompt, images, customSystemMsg) {
   const visionModel = DEFAULT_VISION_MODEL;
@@ -749,9 +755,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     refine_threshold: 0.72,
     timeout_seconds: Math.round(timeoutMin * images.length * 60)
   }, timeoutMin * images.length * 60000 + 30000);
-
+  
   console.log('[Stage 1 raw response]', JSON.stringify(ocrRaw).slice(0, 500));
-
+  
   if (!ocrRaw.success) {
     throw new Error(
       'Stage 1 OCR failed: ' +
@@ -764,169 +770,55 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     `${ocrRaw.pages?.length || 0} page${(ocrRaw.pages?.length||0)!==1?'s':''} processed`
   );
 
-  // ── CHANGE 5: Vision model with tiling ──
+  // Stage 2 — Vision model per page
   const pageInterpretations = [];
-
-  // ── CHANGE 5: buildVisionPrompt helper ──
-  function buildVisionPrompt(pageNum, totalPages, tileNum, totalTiles, pageOCR, tileIndex) {
-    const tileNote = totalTiles > 1
-      ? `You are viewing tile ${tileNum} of ${totalTiles} (${tileIndex === 0 ? 'TOP half' : 'BOTTOM half'}) of page ${pageNum}/${totalPages}.`
-      : `You are viewing page ${pageNum} of ${totalPages}.`;
-    return `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing precise OCR. ${tileNote}
-${mathOCRRules()}
-
-RULES FOR READING MARKS:
-- A tick (check mark) by itself = 1 mark unless a number is written next to it
-- A circled or boxed number written in a different colour or ink = the teacher mark for that question — use this number DIRECTLY, it overrides tick counts
-- A fraction like "2/3" written in the margin = marks awarded / marks available
-- A number at the bottom or top of a page inside a circle or box = the page total
-- A mark of 0 recorded by the teacher means the answer is wrong — do NOT convert it to "unmarked"
-- FAINT PENCIL: Look carefully for light pencil marks — they are just as valid as dark pen marks
-
-INITIAL OCR TEXT (use as a first draft — correct anything that looks wrong against the image):
-${pageOCR}
-
-STEP 1 — INVENTORY: List every question identifier visible on this tile (e.g. "Q1a, Q1b, Q2, Q3(i), Q3(ii)"). Do not omit blanks or unattempted questions.
-
-STEP 2 — For EACH question from Step 1, output exactly this block:
-Q<label>: [exact question text — max 25 words]
-MARKS AVAILABLE: [number from brackets at end of question, or in margin — numeric only, e.g. 2]
-STUDENT ANSWER: [full verbatim handwriting including all working steps and crossed-out text]
-MARKS AWARDED: [teacher mark — count ticks, use circled/boxed number if present, or "unmarked"]
-TEACHER NOTE: [corrections or comments written by teacher, or "none"]
-CONFIDENCE: [HIGH if you can read this clearly | LOW if any part is unclear]
-
-STEP 3 — Output a line: PAGE SUBTOTAL: [sum of marks awarded on this tile, or "mixed" if some are unmarked]
-
-Your Step 2 output must contain EXACTLY the same question identifiers as Step 1.`;
-  }
-
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Reading page ${i + 1} of ${images.length}…`,
-      'Splitting into tiles for higher precision',
+      'Identifying marks, ticks and corrections',
       i, images.length
     );
-
     const pageOCR = ocrRaw.pages?.[i]?.text || '';
     console.log("PAGE OCR:", i, pageOCR.slice(0, 500));
+    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR. Analyse page ${i+1} of ${images.length}.
+${mathOCRRules()}
+Initial OCR text (verify and correct against the image):
+${pageOCR}
 
-    // ── CHANGE 3: decide tile count based on OCR density ──
-    const numTiles = pageOCR.length > 600 ? 2 : 1;
-    let tileTexts = [];
+STEP 1 — QUESTION INVENTORY: Before writing anything else, scan the entire page and list every question number you can see, including sub-parts (e.g. "Questions visible on this page: Q1a, Q1b, Q2, Q3a, Q3b, Q3c"). Do not skip questions or sub-parts, even if the student left them blank.
 
-    if (numTiles > 1) {
-      const tiles = await splitImageIntoTiles(images[i], numTiles);
-      for (let t = 0; t < tiles.length; t++) {
-        updateLoadingText('analysis',
-          `Page ${i + 1}/${images.length} — tile ${t + 1}/${tiles.length}…`,
-          t === 0 ? 'Reading top half of page' : 'Reading bottom half of page'
-        );
-        const tilePrompt = buildVisionPrompt(i + 1, images.length, t + 1, numTiles, pageOCR, t);
-        try {
-          const out = await runpodCall({
-            action: 'ollama-chat',
-            model: visionModel,
-            messages: [
-              { role: 'system', content: 'You are an expert exam marker. Extract all content accurately. Never skip questions.' },
-              { role: 'user', content: tilePrompt, images: [tiles[t]] }
-            ],
-            options: { temperature: 0.05, num_predict: 4096, num_ctx: 16384 },
-            timeout_seconds: Math.round(timeoutMin * 60)
-          }, timeoutMin * 60000 + 30000);
-          tileTexts.push(out.content || '');
-        } catch(_) {
-          tileTexts.push('');
-        }
-      }
-    } else {
-      // Single-pass for sparse / short pages
-      const fullPrompt = buildVisionPrompt(i + 1, images.length, 1, 1, pageOCR, 0);
-      try {
-        const out = await runpodCall({
-          action: 'ollama-chat',
-          model: visionModel,
-          messages: [
-            { role: 'system', content: 'You are an expert exam marker. Extract all content accurately. Never skip questions.' },
-            { role: 'user', content: fullPrompt, images: [images[i].base64] }
-          ],
-          options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
-          timeout_seconds: Math.round(timeoutMin * 60)
-        }, timeoutMin * 60000 + 30000);
-        tileTexts.push(out.content || '');
-      } catch(_) {
-        tileTexts.push(pageOCR);
-      }
-    }
+STEP 2 — For each question or sub-question from Step 1, produce this exact block:
+Q<number>: [exact question text as printed/written — e.g. Q1a, Q2, Q3b]
+MARKS AVAILABLE: [marks allocated to this question or sub-question. Look for a number inside square brackets printed at the END of the question line or in the RIGHT margin e.g. [2], [3 marks], (2). Also check inside the answer workspace box or lines — some scripts print the mark allocation there as [X marks]. Write the numeric value only e.g. 2. If truly absent write 0]
+STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work]
+MARKS AWARDED: [marks the teacher has given this question. Look for: ticks (each tick = 1 mark unless otherwise indicated), crosses, a circled or boxed number written by the teacher, a fraction like 1/2, or a number in a different ink or colour. Count all ticks visible. A circled or boxed number overrides tick count — use that number. If the teacher wrote 0, record 0 unless it is crossed out and replaced. If blank and no marks visible, write "unmarked". Write a numeric value only e.g. 2 or 0]
+TEACHER NOTE: [corrections or comments in different ink, or "none"]
+CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
 
-    const mergedTileText = tileTexts.filter(Boolean).join('\n--- TILE BOUNDARY ---\n');
-    pageInterpretations.push(`=== PAGE ${i + 1} ===\n${mergedTileText || pageOCR}`);
+PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
 
-    // ── CHANGE 6: Short-OCR retry for near-blank results ──
-    const combinedLen = mergedTileText.replace(/\s/g, '').length;
-    if (combinedLen < 60 && images[i].base64) {
-      console.warn(`[Page ${i+1}] Very short OCR output (${combinedLen} chars) — retrying`);
-      updateLoadingText('analysis',
-        `Page ${i + 1} — retrying (low confidence)…`,
-        'Attempting deeper read of faint or unclear content'
-      );
-      try {
-        const retryOut = await runpodCall({
-          action: 'ollama-chat',
-          model: visionModel,
-          messages: [
-            { role: 'system', content: 'You are an expert exam marker. The previous OCR pass returned almost nothing. Look very carefully at the image — even faint pencil, blurry text, or printed marks. Describe everything visible.' },
-            { role: 'user', content: 'Transcribe every piece of text, number, symbol, tick or mark you can see on this exam page. Include question numbers, student working, marks, ticks, crosses, and teacher annotations.', images: [images[i].base64] }
-          ],
-          options: { temperature: 0.15, num_predict: 4096, num_ctx: 16384 },
-          timeout_seconds: Math.round(timeoutMin * 60)
-        }, timeoutMin * 60000 + 30000);
-        const retryText = retryOut.content || '';
-        if (retryText.replace(/\s/g, '').length > combinedLen) {
-          pageInterpretations[pageInterpretations.length - 1] =
-            `=== PAGE ${i + 1} (retry) ===\n${retryText}`;
-        }
-      } catch (_) { /* keep original */ }
+CRITICAL: Your Step 2 output must contain exactly the same question numbers as your Step 1 inventory — no additions, no omissions.`;
+
+    try {
+      const pageOut = await runpodCall({
+        action: 'ollama-chat',
+        model: visionModel,
+        messages: [
+          { role: 'system', content: 'You are an expert exam marker. Extract all content accurately.' },
+          { role: 'user', content: pagePrompt, images: [images[i].base64] }
+        ],
+        options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
+        timeout_seconds: Math.round(timeoutMin * 60)
+      }, timeoutMin * 60000 + 30000);
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || pageOCR}`);
+    } catch(_) {
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOCR}`);
     }
   }
 
-  // ── CHANGE 7: Consistency verification pass ──
-  updateLoadingText('analysis', 'Verifying mark totals…', 'Cross-checking ticks and scores across pages');
-  const rawCombined = pageInterpretations.join('\n\n');
-  let combined = rawCombined;
-
-  try {
-    const verifyPrompt = `You are a marking supervisor. Below is raw OCR output from a student exam.
-Your job is NOT to re-analyse — only to fix obvious OCR errors in marks.
-
-Rules:
-1. If a PAGE SUBTOTAL contradicts the sum of individual MARKS AWARDED on that page, add a correction note in brackets.
-2. If a question shows ticks but MARKS AWARDED says "unmarked", replace "unmarked" with the tick count.
-3. If a question has MARKS AWARDED = 0 but also has clear working shown, add a note "(check: student attempted this)".
-4. Do not change any question text or student answers.
-5. Output the corrected exam text only — no preamble, no JSON.
-
-EXAM OCR:
-${rawCombined.slice(0, 6000)}`;
-
-    const verifyOut = await runpodCall({
-      action: 'ollama-chat',
-      model: DEFAULT_TEXT_MODEL,
-      messages: [
-        { role: 'system', content: 'You are a marking supervisor checking for OCR errors in mark extraction. Fix mark totals only. Return corrected text, nothing else.' },
-        { role: 'user', content: verifyPrompt }
-      ],
-      options: { temperature: 0.05, num_predict: 4096, num_ctx: 8192 },
-      timeout_seconds: Math.round(timeoutMin * 60)
-    }, timeoutMin * 60000 + 30000);
-    const verifiedText = verifyOut.content || '';
-    if (verifiedText.length > rawCombined.length * 0.5) {
-      combined = verifiedText;
-    }
-  } catch (_) { /* keep rawCombined */ }
-
   // Stage 3 — Diagnostic analysis
   updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
+  const combined   = pageInterpretations.join('\n\n');
   const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined}`;
   const finalOut = await runpodCall({
     action: 'ollama-chat',
@@ -1343,12 +1235,14 @@ function _parseQ(id) {
   const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
   return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
 }
+// Format question number for display: "1a" → "Q1(a)", "2" → "Q2"
 function fmtQ(num) {
   const s = String(num || '').replace(/^Q/i, '');
   const m = s.match(/^(\d+)([a-zA-Z]+)/);
   if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
   return 'Q' + s;
 }
+// Format a label that may already start with "Q": "Q1a" → "Q1(a)"
 function fmtQLabel(label) {
   const s = String(label || '');
   const m = s.match(/^Q(\d+)([a-zA-Z]+)/i);
@@ -2027,11 +1921,6 @@ function renderWorksheetResults(res, qs) {
 // ── INIT ──
 updateBadge();
 switchMode('image');
-
-function updateBadge() {
-  const lbl = document.getElementById('status-label');
-  if (lbl) lbl.textContent = 'OCR Pipeline v3';
-}
 </script>
 </body>
 </html>
