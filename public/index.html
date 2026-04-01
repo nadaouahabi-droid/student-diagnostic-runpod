@@ -10,7 +10,6 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  /* ── Primary palette ── */
   --navy:#0d1b2a;--navy-2:#152336;--navy-3:#1d3149;
   --teal:#00b4a6;--teal-dim:#007f75;--teal-light:#e0f7f5;
   --amber:#f0a500;--amber-light:#fff8e6;
@@ -20,7 +19,6 @@
   --text:#1a2332;--text-2:#4a5568;--text-3:#8896aa;
   --border:rgba(0,0,0,0.08);--border-strong:rgba(0,0,0,0.14);
   --radius:10px;--radius-lg:16px;--shadow:0 2px 12px rgba(0,0,0,0.07);
-  /* ── Compatibility aliases (used in JS-generated inline HTML) ── */
   --surface:white;--surface2:var(--cream);--surface3:var(--cream-dim);
   --text2:var(--text-2);--text3:var(--text-3);
   --bd:var(--border);--bd2:var(--border-strong);
@@ -34,12 +32,8 @@
   --navy2:var(--navy-2);--navy3:var(--navy-3);
   --ease:cubic-bezier(0.4,0,0.2,1);
 }
-
-/* ── BASE ── */
 html{scroll-behavior:smooth}
 body{font-family:'DM Sans',system-ui,sans-serif;background:#f0ece4;color:var(--text);min-height:100vh;font-size:15px;line-height:1.6}
-
-/* ── NAV ── */
 nav{background:var(--navy);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,0.3)}
 .nav-brand{display:flex;align-items:center;gap:10px;color:white;font-family:'DM Serif Display',serif;font-size:18px}
 .nav-icon{width:32px;height:32px;background:var(--teal);border-radius:8px;display:flex;align-items:center;justify-content:center}
@@ -53,32 +47,22 @@ nav{background:var(--navy);padding:0 2rem;display:flex;align-items:center;justif
 .status-dot{width:7px;height:7px;border-radius:50%;background:#ff6b6b;transition:background 0.3s;flex-shrink:0}
 .status-dot.ok{background:var(--teal)}
 .status-dot.checking{background:var(--amber);animation:pulse 1s infinite}
-
-/* ── ANIMATIONS ── */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-
-/* ── LAYOUT ── */
 .page{display:none}
 .page.active{display:block;animation:fadeUp 0.25s var(--ease)}
 .container{max-width:860px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
 .container-wide{max-width:1020px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
-
-/* ── HERO ── */
 .hero{background:var(--navy);padding:3.5rem 2rem 2.5rem;text-align:center;position:relative;overflow:hidden}
 .hero::before{content:'';position:absolute;top:-60px;left:-60px;width:220px;height:220px;background:radial-gradient(circle,rgba(0,180,166,0.15) 0%,transparent 70%);pointer-events:none}
 .hero::after{content:'';position:absolute;bottom:-80px;right:-40px;width:300px;height:300px;background:radial-gradient(circle,rgba(240,165,0,0.08) 0%,transparent 70%);pointer-events:none}
 .hero h1{font-family:'DM Serif Display',serif;font-size:clamp(2rem,5vw,3rem);color:white;line-height:1.15;margin-bottom:0.75rem;position:relative;z-index:1}
 .hero h1 em{color:var(--teal);font-style:normal}
 .hero-sub{color:rgba(255,255,255,0.55);font-size:15px;max-width:520px;margin:0 auto 1.5rem;position:relative;z-index:1}
-
-/* ── CARDS ── */
 .card{background:white;border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);padding:1.5rem;margin-bottom:1.25rem}
 .card-title{font-size:14px;font-weight:600;margin-bottom:1rem;color:var(--text);display:flex;align-items:center;gap:8px}
 .card-title-icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
-
-/* ── FORMS ── */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
 .form-field{margin-bottom:1rem}
 .form-label{display:block;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
@@ -86,8 +70,6 @@ input[type="text"],input[type="password"],input[type="url"],input[type="number"]
 input:focus,select:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,180,166,0.12)}
 textarea{min-height:220px;resize:vertical;line-height:1.65;font-size:13px}
 select{cursor:pointer}
-
-/* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:var(--radius);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:1.5px solid transparent;transition:all 0.15s;white-space:nowrap}
 .btn:active{transform:scale(0.98)}
 .btn-primary{background:var(--teal);color:white;border-color:var(--teal);box-shadow:0 2px 8px rgba(0,180,166,0.25)}
@@ -98,15 +80,11 @@ select{cursor:pointer}
 .btn-navy{background:var(--navy);color:white;border-color:var(--navy)}
 .btn-navy:hover{background:var(--navy-2)}
 .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-
-/* ── MODE TOGGLE ── */
 .mode-toggle{display:flex;gap:0;margin-bottom:1rem;border:1.5px solid var(--border-strong);border-radius:var(--radius);overflow:hidden}
 .mode-btn{flex:1;padding:9px 14px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;border:none;background:white;color:var(--text-3);cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:7px}
 .mode-btn:not(:last-child){border-right:1.5px solid var(--border-strong)}
 .mode-btn.active{background:var(--navy);color:white}
 .mode-btn:hover:not(.active){background:var(--cream);color:var(--text)}
-
-/* ── UPLOAD ── */
 .upload-zone{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:2.5rem 1.5rem;text-align:center;cursor:pointer;transition:all 0.2s;background:white;position:relative}
 .upload-zone:hover,.upload-zone.drag-over{border-color:var(--teal);background:var(--teal-light)}
 .upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -122,15 +100,11 @@ select{cursor:pointer}
 .thumb-rm{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.55);color:white;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none}
 .thumb-rm:hover{background:var(--red)}
 .thumb-lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:10px;padding:3px 5px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* ── METRICS ── */
 .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
 .metric-card{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;box-shadow:var(--shadow)}
 .metric-label{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
 .metric-val{font-family:'DM Serif Display',serif;font-size:28px;line-height:1}
 .mv-red{color:var(--red)}.mv-green{color:var(--green)}.mv-amber{color:var(--amber)}.mv-teal{color:var(--teal)}.mv-navy{color:var(--navy)}
-
-/* ── TOPIC ROWS ── */
 .topic-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
 .topic-row:last-child{border-bottom:none}
 .topic-name{flex:1.2;font-size:13px;font-weight:500}
@@ -141,13 +115,9 @@ select{cursor:pointer}
 .chip-r{background:var(--red-light);color:var(--red)}
 .chip-a{background:var(--amber-light);color:#b07800}
 .chip-g{background:var(--green-light);color:#1a7a50}
-
-/* ── MISTAKES ── */
 .mistake-card{border-radius:var(--radius);border-left:3px solid var(--red);background:var(--red-light);padding:10px 14px;margin-bottom:8px}
 .mistake-title{font-size:13px;font-weight:600;color:var(--red);margin-bottom:3px}
 .mistake-desc{font-size:12px;color:var(--text-2);line-height:1.55}
-
-/* ── STEP LIST ── */
 .step-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
 .step-item:last-child{border-bottom:none}
 .step-badge{width:32px;height:32px;min-width:32px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
@@ -155,14 +125,10 @@ select{cursor:pointer}
 .step-title{font-size:14px;font-weight:600;margin-bottom:3px}
 .step-desc{font-size:13px;color:var(--text-2);margin-bottom:6px;line-height:1.55}
 .milestone{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--teal-dim);font-weight:600;background:var(--teal-light);padding:3px 10px;border-radius:20px;margin-top:4px}
-
-/* ── LOADING ── */
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;text-align:center;gap:0}
 .spinner{width:36px;height:36px;border:3px solid var(--cream-dim);border-top-color:var(--teal);border-radius:50%;animation:spin 0.75s linear infinite;margin-bottom:1rem}
 .loading-text{font-size:14px;color:var(--text-3);font-weight:500}
 .loading-sub{font-size:12px;color:var(--text-3);margin-top:4px;opacity:0.7}
-
-/* ── PAGE PROGRESS ── */
 .page-progress{width:100%;max-width:340px;margin-top:14px}
 .pp-label{font-size:11px;color:var(--text-3);margin-bottom:5px;text-align:center}
 .pp-bar-wrap{height:5px;background:var(--cream-dim);border-radius:3px;overflow:hidden}
@@ -171,33 +137,23 @@ select{cursor:pointer}
 .pp-dot{width:10px;height:10px;border-radius:50%;background:var(--cream-dim);border:1.5px solid var(--border-strong);transition:all 0.2s}
 .pp-dot.done{background:var(--teal);border-color:var(--teal)}
 .pp-dot.active{background:var(--amber);border-color:var(--amber);animation:pulse 1s infinite}
-
-/* ── TAGS / CHIPS ── */
 .tag{display:inline-block;font-size:12px;padding:3px 10px;background:var(--cream);color:var(--text-2);border-radius:20px;margin:2px}
 .tag-g{background:var(--green-light);color:#1a7a50}
 .tag-r{background:var(--red-light);color:var(--red)}
-
-/* ── SECTION HEADER ── */
 .section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px}
 .section-hd h2{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;color:var(--navy)}
 .section-hd p{font-size:13px;color:var(--text-3)}
-
-/* ── ALERTS ── */
 .alert-danger{background:var(--red-light);border:1px solid rgba(224,76,76,0.2);border-left:3px solid var(--red);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
 .alert-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px}
 .alert-item{font-size:13px;color:var(--text-2);padding:2px 0}
 .info-box{background:var(--amber-light);border:1px solid rgba(240,165,0,0.25);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#7a5c00;margin-bottom:12px;line-height:1.5}
 .info-box.teal{background:var(--teal-light);border-color:rgba(0,180,166,0.25);color:#005c55}
 .info-box.green{background:var(--green-light);border-color:rgba(40,168,112,0.25);color:#1a5c3a}
-
-/* ── RESULT HEADER ── */
 .result-header{background:var(--navy);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .result-header-info h3{font-family:'DM Serif Display',serif;font-size:20px;color:white;font-weight:400;margin-bottom:4px}
 .result-header-info p{font-size:13px;color:rgba(255,255,255,0.45)}
 .rhs-score .big{font-family:'DM Serif Display',serif;font-size:42px;line-height:1;color:white}
 .rhs-score .sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px;text-align:right}
-
-/* ── REPORT ── */
 .report-body{font-size:14px;color:var(--text-2);line-height:1.75}
 .report-body h3{font-family:'DM Serif Display',serif;font-size:17px;color:var(--navy);margin:1.25rem 0 0.5rem;font-weight:400}
 .report-body strong{font-weight:600;color:var(--text)}
@@ -218,8 +174,6 @@ select{cursor:pointer}
 .diag-label{color:rgba(255,255,255,0.5)}
 .diag-value{font-weight:700;color:white}
 .diag-value.red{color:var(--red)}.diag-value.amber{color:var(--amber)}.diag-value.teal{color:var(--teal)}
-
-/* ── QUESTION BREAKDOWN TABLE ── */
 .qb-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:0.5rem}
 .qb-table th{background:var(--navy);color:rgba(255,255,255,0.7);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:9px 12px;text-align:left}
 .qb-table th:first-child{border-radius:8px 0 0 0}
@@ -231,17 +185,11 @@ select{cursor:pointer}
 .qb-correct{background:var(--green-light);color:#1a7a50}
 .qb-careless{background:var(--amber-light);color:#7a5c00}
 .qb-concept{background:var(--red-light);color:var(--red)}
-
-/* ── CONCEPT GAPS ── */
 .concept-gap-item{padding:10px 14px;border-left:3px solid var(--red);background:var(--red-light);border-radius:0 var(--radius) var(--radius) 0;margin-bottom:8px}
 .concept-gap-topic{font-size:13px;font-weight:700;color:var(--red);margin-bottom:3px}
 .concept-gap-desc{font-size:12px;color:var(--text-2);line-height:1.55}
-
-/* ── FEEDBACK BLOCK ── */
 .feedback-block{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-3) 100%);border-radius:var(--radius-lg);padding:1.25rem}
 .feedback-text{font-size:14px;color:rgba(255,255,255,0.65);line-height:1.75}
-
-/* ── WORKSHEET ── */
 .ws-q{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
 .ws-q-header{display:flex;gap:12px}
 .ws-q-num{font-family:'DM Serif Display',serif;font-size:18px;color:var(--teal);min-width:28px}
@@ -273,8 +221,6 @@ select{cursor:pointer}
 .ws-result-score{font-family:'DM Serif Display',serif;font-size:36px;color:white;line-height:1}
 .ws-result-sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:3px}
 .ws-checking{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-3);padding:14px}
-
-/* ── PRINT ── */
 @media print{
   nav,.no-print{display:none!important}
   .page{display:block!important}
@@ -283,8 +229,6 @@ select{cursor:pointer}
   .card{box-shadow:none}
   .ws-textarea{border:1px solid #ccc!important;background:white!important}
 }
-
-/* ── RESPONSIVE ── */
 @media(max-width:640px){
   .form-grid{grid-template-columns:1fr}
   .metric-grid{grid-template-columns:1fr 1fr}
@@ -297,7 +241,7 @@ select{cursor:pointer}
 </head>
 <body>
 
-<!-- ═══ NAV ═══ -->
+<!-- NAV -->
 <nav>
   <div class="nav-brand">
     <div class="nav-icon">
@@ -307,7 +251,6 @@ select{cursor:pointer}
     </div>
     LearnDiag
   </div>
-
   <div class="nav-steps">
     <div class="nav-step active" id="navs-input"     onclick="goPage('input')">    <div class="nav-dot"></div>Input</div>
     <div class="nav-step"        id="navs-analysis"  onclick="goPage('analysis')"> <div class="nav-dot"></div>Analysis</div>
@@ -315,21 +258,17 @@ select{cursor:pointer}
     <div class="nav-step"        id="navs-plan"      onclick="goPage('plan')">     <div class="nav-dot"></div>Plan</div>
     <div class="nav-step"        id="navs-worksheet" onclick="navToWorksheet()">   <div class="nav-dot"></div>Worksheet</div>
   </div>
-
   <div class="model-badge">
     <span id="status-label">    </span>
   </div>
 </nav>
 
-<!-- ═══════ INPUT PAGE ═══════ -->
+<!-- INPUT PAGE -->
 <div id="page-input" class="page active">
   <div class="hero">
     <h1>Student <em>Diagnostic</em><br>System</h1>
   </div>
-
   <div class="container">
-
-    <!-- Student Info -->
     <div class="card">
       <div class="card-title">
         <div class="card-title-icon" style="background:rgba(0,180,166,0.12)">👤</div>
@@ -356,7 +295,6 @@ select{cursor:pointer}
       </div>
     </div>
 
-    <!-- Exam Input -->
     <div class="card">
       <div class="card-title">
         <div class="card-title-icon" style="background:rgba(240,165,0,0.12)">📋</div>
@@ -403,13 +341,12 @@ select{cursor:pointer}
   </div>
 </div>
 
-<!-- ═══ OTHER PAGES ═══ -->
+<!-- OTHER PAGES -->
 <div id="page-analysis"  class="page"><div class="container-wide"><div id="analysis-content"> <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-report"    class="page"><div class="container">     <div id="report-content">  <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-plan"      class="page"><div class="container-wide"><div id="plan-content">    <div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 <div id="page-worksheet" class="page"><div class="container">     <div id="worksheet-content"><div class="loading-state"><div class="spinner"></div><div class="loading-text">Preparing…</div></div></div></div></div>
 
-<!-- ═══════════════════════════════════════════════════════ -->
 <script>
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -417,14 +354,14 @@ if (typeof pdfjsLib !== 'undefined') {
 
 // ── STATE ──
 let APP = {
-  provider: 'ocrpipeline', inputMode: 'image',
+  provider: 'ollama', inputMode: 'image',
   images: [], pdfData: null, pdfName: null,
   studentName:'', grade:'', subject:'', examType:'', script:'', context:'',
   analysis:null, report:null, plan:null, worksheet:null,
   completedPages: new Set(['input'])
 };
 
-// ── MODEL DEFAULTS (hardcoded — no UI panel needed) ──
+// ── MODEL DEFAULTS ──
 const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
@@ -483,6 +420,7 @@ async function fileToB64(file) {
     r.readAsDataURL(file);
   });
 }
+
 function compressCanvas(canvas, maxPx, quality) {
   maxPx = maxPx || 1000; quality = quality || 0.85;
   let w = canvas.width, h = canvas.height;
@@ -519,52 +457,6 @@ async function compressImageFile(file, maxPx, quality) {
   });
 }
 
-function applyOCRPreprocessing(canvas) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const src = ctx.getImageData(0, 0, w, h);
-  const s = src.data;
-
-  // Build grayscale + find percentile range for contrast stretch
-  const lum = new Float32Array(w * h);
-  for (let i = 0, p = 0; i < s.length; i += 4, p++) {
-    lum[p] = 0.299 * s[i] + 0.587 * s[i + 1] + 0.114 * s[i + 2];
-  }
-  const sorted = Float32Array.from(lum).sort();
-  const lo = sorted[Math.floor(w * h * 0.02)];  // 2nd percentile
-  const hi = sorted[Math.floor(w * h * 0.98)];  // 98th percentile
-  const range = Math.max(1, hi - lo);
-
-  // Contrast-stretched grayscale
-  const gray = new Float32Array(w * h);
-  for (let p = 0; p < lum.length; p++) {
-    gray[p] = Math.min(255, Math.max(0, (lum[p] - lo) / range * 255));
-  }
-
-  // Unsharp mask: sharpened = gray + strength * (gray - blur)
-  const strength = 0.7;
-  const dst = ctx.createImageData(w, h);
-  const d = dst.data;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const p = y * w + x;
-      let blurred = gray[p];
-      if (x > 0 && x < w - 1 && y > 0 && y < h - 1) {
-        blurred = (
-          gray[(y - 1) * w + x - 1] * 0.0625 + gray[(y - 1) * w + x] * 0.125 + gray[(y - 1) * w + x + 1] * 0.0625 +
-          gray[y * w + x - 1]       * 0.125  + gray[p]                * 0.25  + gray[y * w + x + 1]       * 0.125 +
-          gray[(y + 1) * w + x - 1] * 0.0625 + gray[(y + 1) * w + x] * 0.125 + gray[(y + 1) * w + x + 1] * 0.0625
-        );
-      }
-      const val = Math.min(255, Math.max(0, gray[p] + strength * (gray[p] - blurred)));
-      const i4 = p * 4;
-      d[i4] = d[i4 + 1] = d[i4 + 2] = val;
-      d[i4 + 3] = 255;
-    }
-  }
-  ctx.putImageData(dst, 0, 0);
-  return canvas;
-}
 async function handlePDF(file) {
   const prog = document.getElementById('pdf-progress');
   prog.style.display = 'block';
@@ -591,7 +483,7 @@ async function handlePDF(file) {
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;   
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       APP.images.push({
         base64:   compressCanvas(canvas, 2200, 0.9),
         mimeType: 'image/jpeg',
@@ -696,40 +588,30 @@ async function runpodCall(input, timeoutMs = 600000) {
   console.log("Job submitted:", jobId);
 
   const start = Date.now();
-
   while (true) {
     if (Date.now() - start > timeoutMs) {
       throw new Error("Timeout waiting for RunPod job");
     }
-
     const poll = await fetch(`/api/status?jobId=${jobId}`);
     const data = await poll.json();
-
     console.log("Status:", data.status);
-
-    if (data.status === "COMPLETED") {
-      return data.output;
-    }
-
-    if (data.status === "FAILED") {
-      throw new Error("RunPod job failed: " + JSON.stringify(data));
-    }
-
-    if (data.status === "CANCELLED" || data.status === "TIMED_OUT") {
-      throw new Error("RunPod job " + data.status);
-    }
-
+    if (data.status === "COMPLETED") return data.output;
+    if (data.status === "FAILED")    throw new Error("RunPod job failed: " + JSON.stringify(data));
+    if (data.status === "CANCELLED" || data.status === "TIMED_OUT") throw new Error("RunPod job " + data.status);
     await new Promise(r => setTimeout(r, 3000));
   }
 }
 
-// ── OCR PIPELINE ──
+// ── OCR PIPELINE — Ollama-only (vision model per page → text model analysis) ──
+// Stage 1: Ollama vision model reads each page directly from the image.
+//          No external OCR (PaddleOCR / TrOCR) is used.
+// Stage 2: Ollama text model aggregates page transcripts → structured JSON.
 async function callOCRPipeline(prompt, images, customSystemMsg) {
   const visionModel = DEFAULT_VISION_MODEL;
   const textModel   = DEFAULT_TEXT_MODEL;
   const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
-  // Text-only path
+  // Text-only path (no images uploaded)
   if (!images || !images.length) {
     updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
     const out = await runpodCall({
@@ -745,78 +627,50 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     return out.content || '';
   }
 
-  updateLoadingText('analysis',
-    `Reading exam pages… (${images.length} page${images.length > 1 ? 's' : ''})`,
-    'Extracting handwriting and printed text'
-  );
-  const ocrRaw = await runpodCall({
-    action: 'ocr-batch',
-    images: images.map(i => i.base64),
-    refine_threshold: 0.72,
-    timeout_seconds: Math.round(timeoutMin * images.length * 60)
-  }, timeoutMin * images.length * 60000 + 30000);
-  
-  console.log('[Stage 1 raw response]', JSON.stringify(ocrRaw).slice(0, 500));
-  
-  if (!ocrRaw.success) {
-    throw new Error(
-      'Stage 1 OCR failed: ' +
-      (ocrRaw.error || 'handler returned success=false — check RunPod logs for details. Raw: ' + JSON.stringify(ocrRaw).slice(0, 200))
-    );
-  }
-  const ocrText = ocrRaw.combined_text || '';
-  updateLoadingText('analysis',
-    `Interpreting exam structure…`,
-    `${ocrRaw.pages?.length || 0} page${(ocrRaw.pages?.length||0)!==1?'s':''} processed`
-  );
-
-  // Stage 2 — Vision model per page
+  // Stage 1 — Ollama vision model reads each page image directly
   const pageInterpretations = [];
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Reading page ${i + 1} of ${images.length}…`,
-      'Identifying marks, ticks and corrections',
+      'Identifying questions, marks, ticks and corrections',
       i, images.length
     );
-    const pageOCR = ocrRaw.pages?.[i]?.text || '';
-    console.log("PAGE OCR:", i, pageOCR.slice(0, 500));
-    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR. Analyse page ${i+1} of ${images.length}.
-${mathOCRRules()}
-Initial OCR text (verify and correct against the image):
-${pageOCR}
 
+    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
+${mathOCRRules()}
 STEP 1 — QUESTION INVENTORY: Before writing anything else, scan the entire page and list every question number you can see, including sub-parts (e.g. "Questions visible on this page: Q1a, Q1b, Q2, Q3a, Q3b, Q3c"). Do not skip questions or sub-parts, even if the student left them blank.
 
 STEP 2 — For each question or sub-question from Step 1, produce this exact block:
-Q<number>: [exact question text as printed/written — e.g. Q1a, Q2, Q3b]
-MARKS AVAILABLE: [marks allocated to this question or sub-question. Look for a number inside square brackets printed at the END of the question line or in the RIGHT margin e.g. [2], [3 marks], (2). Also check inside the answer workspace box or lines — some scripts print the mark allocation there as [X marks]. Write the numeric value only e.g. 2. If truly absent write 0]
+Q<number>: [exact question text as printed/written]
+MARKS AVAILABLE: [marks allocated — look for a number in square brackets at end of question line or right margin e.g. [2], [3 marks], (2). Also check inside answer boxes. Write the numeric value only e.g. 2. If truly absent write 0]
 STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work]
-MARKS AWARDED: [marks the teacher has given this question. Look for: ticks (each tick = 1 mark unless otherwise indicated), crosses, a circled or boxed number written by the teacher, a fraction like 1/2, or a number in a different ink or colour. Count all ticks visible. A circled or boxed number overrides tick count — use that number. If the teacher wrote 0, record 0 unless it is crossed out and replaced. If blank and no marks visible, write "unmarked". Write a numeric value only e.g. 2 or 0]
+MARKS AWARDED: [marks the teacher gave — look for ticks (each = 1 mark), crosses, a circled or boxed number in different ink. A circled/boxed number overrides tick count. If teacher wrote 0, record 0 unless crossed out and replaced. If blank write "unmarked". Write a numeric value only e.g. 2 or 0]
 TEACHER NOTE: [corrections or comments in different ink, or "none"]
 CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
 
 PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
 
-CRITICAL: Your Step 2 output must contain exactly the same question numbers as your Step 1 inventory — no additions, no omissions.`;
+CRITICAL: Step 2 must contain exactly the same question numbers as Step 1 — no additions, no omissions.`;
 
     try {
       const pageOut = await runpodCall({
         action: 'ollama-chat',
         model: visionModel,
         messages: [
-          { role: 'system', content: 'You are an expert exam marker. Extract all content accurately.' },
+          { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately.' },
           { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
         options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
         timeout_seconds: Math.round(timeoutMin * 60)
       }, timeoutMin * 60000 + 30000);
-      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || pageOCR}`);
-    } catch(_) {
-      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOCR}`);
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`);
+    } catch(err) {
+      console.warn(`Page ${i+1} vision call failed:`, err.message);
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n(vision model failed for this page: ${err.message})`);
     }
   }
 
-  // Stage 3 — Diagnostic analysis
+  // Stage 2 — Text model produces structured diagnostic JSON from page transcripts
   updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
   const combined   = pageInterpretations.join('\n\n');
   const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined}`;
@@ -884,9 +738,7 @@ function parseJSON(raw) {
     src = src.replace(/^\uFEFF/, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
     src = src.replace(/\u201c|\u201d|\u2033|\u02BA/g, '"').replace(/\u2018|\u2019|\u02BC/g, "'");
     src = src.replace(/,(\s*[}\]])/g, '$1');
-
     const MATH = {'²':'^2','³':'^3','⁴':'^4','√':'sqrt','±':'+/-','×':'*','÷':'/','π':'pi','≤':'<=','≥':'>=','≠':'!=','°':' degrees','…':'...'};
-
     let out = '', inStr = false, i = 0;
     while (i < src.length) {
       const ch = src[i];
@@ -922,7 +774,6 @@ function parseJSON(raw) {
       }
     }
     if (inStr) out += '"';
-
     out = out.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g, (m, inner) => '"' + inner.replace(/ {2,}/g, ' ') + '"');
     return out;
   }
@@ -944,7 +795,7 @@ function parseJSON(raw) {
       const m = raw.match(/\{[\s\S]+\}/);
       if (m) return JSON.parse(closeTruncated(repairJSON(m[0])));
     } catch (_) {}
-    throw new Error(`JSON parse failed (${e?.message}). Try simpler model or use OCR Pipeline for better reliability.`);
+    throw new Error(`JSON parse failed (${e?.message}).`);
   }
 }
 
@@ -1022,17 +873,6 @@ function errCard(msg) {
   return `<div class="card"><p style="color:var(--red);font-size:14px;font-weight:600;margin-bottom:6px">Error</p><p style="font-size:13px;color:var(--text-2)">${msg}</p><div class="action-row" style="margin-top:12px"><button class="btn btn-sm btn-secondary" onclick="goPage('input')">← Back</button></div></div>`;
 }
 
-// ── DEMO ──
-function loadDemo() {
-  document.getElementById('student-name').value  = 'Alex Johnson';
-  document.getElementById('student-grade').value = 'Year 10';
-  document.getElementById('subject').value       = 'Mathematics';
-  document.getElementById('exam-type').value     = 'End of Term Mock Exam';
-  switchMode('text');
-  document.getElementById('script-text').value = `Q1. Solve for x: 3x - 7 = 14 [2 marks]\nAnswer: 3x = 21, x = 7  ✓ (2/2)\n\nQ2. Expand: (2x + 3)(x - 4) [3 marks]\nAnswer: 2x² - 5x - 4  ✗ (1/3) — Correct: 2x² - 5x - 12\n\nQ3. Area of circle radius 6cm [2 marks]\nAnswer: π × 36 = 113.10 cm²  ✓ (2/2)\n\nQ4. Simultaneous: 2x + y = 10 and x - y = 2 [4 marks]\nAnswer: x = 4, y = 2  ✓ (4/4)\n\nQ5. Expand: (x + 4)² [2 marks]\nAnswer: x² + 16  ✗ (0/2) — Correct: x² + 8x + 16\n\nQ6. P(A)=0.3, P(B)=0.5, independent. P(A and B)? [2 marks]\nAnswer: 0.3 + 0.5 = 0.8  ✗ (0/2) — Correct: 0.15\n\nQ7. nth term of 5, 8, 11, 14... [2 marks]\nAnswer: 3n + 2  ✓ (2/2)\n\nQ8. Solve: x² - 7x + 10 = 0 [3 marks]\nAnswer: No attempt (0/3)\n\nTotal: 11/20`;
-  document.getElementById('extra-context').value = 'Strong in linear equations. Missed probability. Struggles with expanding brackets.';
-}
-
 // ── DIAGNOSTIC FLOW ──
 async function runDiagnostic() {
   const name     = document.getElementById('student-name').value.trim()  || 'Student';
@@ -1041,12 +881,11 @@ async function runDiagnostic() {
   const examType = document.getElementById('exam-type').value.trim();
   const context  = document.getElementById('extra-context').value.trim();
   const imgs     = APP.inputMode !== 'text' ? APP.images : [];
-  const pdfData  = null;
   let script = '';
   if (APP.inputMode === 'text') script = document.getElementById('script-text').value.trim();
   else if (APP.inputMode === 'both') script = document.getElementById('both-text').value.trim();
 
-  if (!script && !imgs.length && !pdfData) {
+  if (!script && !imgs.length) {
     alert('Please paste the exam script OR upload at least one image / PDF.');
     return;
   }
@@ -1173,7 +1012,6 @@ function mathPlanExtras() {
 // ── ANALYSIS ──
 async function runAnalysis() {
   const imgs    = APP.inputMode !== 'text' ? APP.images : [];
-  const pdfData = null;
   const hasVisual = imgs.length > 0;
 
   setLoadingState('analysis',
@@ -1183,7 +1021,7 @@ async function runAnalysis() {
   );
 
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
-  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be OCR'd and provided as text below]` : '';
+  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the vision model and provided as text below]` : '';
 
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathAnalysisRules()}
@@ -1207,9 +1045,8 @@ RULES FOR questions array:
 - If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
 - questionText: a brief (max 12 word) description of what the question asks — taken directly from the exam
 - topic: which curriculum topic this question tests
-- marksAvailable: marks allocated to this question or sub-question. Find the number in square brackets at the end of the question line or in the margin e.g. [2], [3 marks]. Also check inside answer workspaces — marks are sometimes printed there as [X marks]. Use the per-sub-question value, not the total
-- marksAwarded: marks the student actually received for this specific question or sub-question (count ticks, read circled scores)
-- TEACHER MARK RULE: if the teacher has written a mark in different ink and it is 0, treat marksAwarded as 0 (the answer is wrong) — UNLESS the 0 has been crossed out and replaced, or there is an explicit additive annotation such as (+1)
+- marksAvailable: marks allocated to this question or sub-question
+- marksAwarded: marks the student actually received for this specific question or sub-question
 - Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
 
 RULES FOR topicPerformance:
@@ -1219,7 +1056,7 @@ RULES FOR topicPerformance:
 - frequency = once | recurring. errorType = one of the 7 types listed.`;
 
   try {
-    const raw    = await callAI(prompt, hasVisual ? imgs : null, pdfData);
+    const raw    = await callAI(prompt, hasVisual ? imgs : null, null);
     APP.analysis = normalizeAnalysis(parseJSON(raw));
     renderAnalysis(APP.analysis);
   } catch(e) {
@@ -1235,14 +1072,12 @@ function _parseQ(id) {
   const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
   return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
 }
-// Format question number for display: "1a" → "Q1(a)", "2" → "Q2"
 function fmtQ(num) {
   const s = String(num || '').replace(/^Q/i, '');
   const m = s.match(/^(\d+)([a-zA-Z]+)/);
   if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
   return 'Q' + s;
 }
-// Format a label that may already start with "Q": "Q1a" → "Q1(a)"
 function fmtQLabel(label) {
   const s = String(label || '');
   const m = s.match(/^Q(\d+)([a-zA-Z]+)/i);
@@ -1387,9 +1222,9 @@ INSTRUCTIONS:
 - carelessMistakesMarksLost: marks lost from arithmetic slips and sign errors
 - totalMarksLost: total marks lost = totalMarks - marksObtained
 - biggestWeakTopic: single most important topic to fix
-- questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above — same question identifiers (including sub-parts like Q1a, Q1b), same marks. Do not add extra questions. Do not change question identifiers.
+- questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above — same question identifiers, same marks
 - For each question: errorType = "correct" | "careless" | "concept" | "no attempt" | "partial"
-- marksLost = marksAvailable - marksAwarded (use the ground-truth values)
+- marksLost = marksAvailable - marksAwarded
 - diagnosis: 1 sentence explaining what the student did right or wrong on that specific question
 - summary: 2-3 sentences, specific and encouraging, NO apostrophes
 - conceptGaps: only for topics where a genuine conceptual misunderstanding was found
@@ -1670,7 +1505,7 @@ Replace ALL 10 placeholder questions with real exam-style questions targeting ${
   try {
     const raw = await callAI(
       prompt, null, null,
-      'You are an expert educational marker. Mark the student worksheet using ONLY the questions, correct answers, and student responses provided in this message. Do not invent or substitute your own questions. Return valid JSON exactly as instructed.'
+      'You are an expert educational marker. Return valid JSON exactly as instructed.'
     );
     APP.worksheet = parseJSON(raw);
     renderWorksheet(APP.worksheet);
@@ -1919,6 +1754,7 @@ function renderWorksheetResults(res, qs) {
 }
 
 // ── INIT ──
+function updateBadge() {}
 updateBadge();
 switchMode('image');
 </script>
