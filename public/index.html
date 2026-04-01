@@ -333,7 +333,7 @@ select{cursor:pointer}
     </div>
 
     <div class="action-row">
-      <button class="btn btn-primary" onclick="runDiagnostic()">
+      <button class="btn btn-primary" id="run-btn" onclick="runDiagnostic()" disabled style="opacity:0.45;cursor:not-allowed;pointer-events:none;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         Run full diagnostic
       </button>
@@ -467,12 +467,13 @@ async function handlePDF(file) {
   APP.pdfName = file.name;
 
   if (typeof pdfjsLib === 'undefined') {
-    prog.style.color = 'var(--red)';
-    prog.textContent = '⚠ PDF renderer failed to load (CDN may be blocked). Try refreshing, or convert your PDF to images (JPG/PNG) before uploading.';
+    prog.style.color = 'var(--amber)';
+    prog.textContent = '⚠ PDF page previews unavailable (renderer not loaded) — file is still ready for analysis.';
+    APP.images.push({ base64: '', mimeType: 'image/jpeg', name: file.name, isPdfPlaceholder: true });
     renderPreviews();
     return;
   }
-
+  
   try {
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
@@ -514,23 +515,16 @@ function removeImg(i) {
 
 function renderPreviews() {
   const el = document.getElementById('img-previews');
-  if (!APP.images.length && !APP.pdfData) { el.innerHTML = ''; return; }
-  const badge = APP.pdfName
-    ? `<div style="margin-bottom:8px"><span style="background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin:2px">📄 ${APP.pdfName}</span></div>`
-    : '';
+  const runBtn = document.getElementById('run-btn');
+  const hasContent = APP.images.length > 0 || !!APP.pdfData;
+  if (runBtn) { runBtn.disabled = !hasContent; runBtn.style.opacity = hasContent ? '1' : '0.45'; runBtn.style.cursor = hasContent ? '' : 'not-allowed'; runBtn.style.pointerEvents = hasContent ? '' : 'none'; }
   const thumbItems = APP.images.map((img,i) =>
-    '<div class="thumb"><img src="data:' + img.mimeType + ';base64,' + img.base64 + '" alt="p' + (i+1) + '">'
+    '<div class="thumb" style="' + (img.isPdfPlaceholder ? 'display:flex;align-items:center;justify-content:center;font-size:2rem;background:#fff5f5' : '') + '">'
+    + (img.isPdfPlaceholder ? '📄' : '<img src="data:' + img.mimeType + ';base64,' + img.base64 + '" alt="p' + (i+1) + '">')
     + '<button class="thumb-rm" onclick="removeImg(' + i + ')">✕</button>'
     + '<div class="thumb-lbl">' + (img.name||'Page '+(i+1)) + '</div></div>'
   ).join('');
-  const thumbs = APP.images.length
-    ? '<div style="margin-top:8px;margin-bottom:4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3)">'
-      + APP.images.length + ' page' + (APP.images.length>1?'s':'') + '</div>'
-      + '<div class="thumb-grid">' + thumbItems + '</div>'
-    : '';
-  el.innerHTML = badge + thumbs;
-}
-
+  
 // ── LOADING ──
 function setLoadingState(pageId, title, sub, current, total) {
   const el = document.getElementById(pageId + '-content');
