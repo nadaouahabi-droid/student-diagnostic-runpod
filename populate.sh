@@ -18,7 +18,6 @@ export OLLAMA_MODELS=/runpod-volume/ollama-models
 export FLAGS_use_mkldnn=0
 export PADDLE_DISABLE_MKLDNN=1
 
-# ── Package target ───────────────────────────────────────────
 PYPACKAGES=/runpod-volume/pypackages
 mkdir -p "$PADDLEOCR_HOME" "$PADDLEX_HOME" "$HF_HOME" "$OLLAMA_MODELS" "$PYPACKAGES"
 
@@ -27,41 +26,49 @@ TROCR_CHECKPOINT="microsoft/trocr-base-handwritten"
 # ── System deps ──────────────────────────────────────────────
 echo "=== Installing system deps ==="
 apt-get update -qq && apt-get install -y --no-install-recommends \
-    python3.10 python3-pip python3.10-distutils curl ca-certificates \
+    python3.10 python3.10-venv python3.10-distutils curl ca-certificates \
     libglib2.0-0 libgl1
 
-# ── Python base tools ────────────────────────────────────────
-echo "=== Installing base Python tools ==="
-pip install --target="$PYPACKAGES" --upgrade pip setuptools wheel --quiet
+# ── FIX 1: pin all pip/python calls to python3.10 explicitly ─
+# The RunPod base image defaults to python3.13 for bare `pip`
+# and `python3`. PaddlePaddle has no 3.13 wheel — it tops out
+# at 3.12. We install pip into the 3.10 interpreter and use it
+# for every subsequent install.
+echo "=== Bootstrapping pip for Python 3.10 ==="
+curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+PIP="python3.10 -m pip"
 
 # ── Stage 1: PaddlePaddle + PaddleOCR ───────────────────────
 echo "=== Installing PaddleOCR stack ==="
-pip install --target="$PYPACKAGES" --quiet \
+# FIX 2: paddlepaddle-gpu==2.6.0.post120 does not exist.
+#   Correct package: paddlepaddle-gpu==2.6.1.post120
+#   Correct index:   cuda12.1  (not cudnn8.6-cuda12.0)
+$PIP install --target="$PYPACKAGES" --quiet \
     "numpy==1.26.4" \
-    "paddlepaddle-gpu==2.6.0.post120" \
-        -f https://www.paddlepaddle.org.cn/whl/linux/cudnn8.6-cuda12.0/stable.html \
+    "paddlepaddle-gpu==2.6.1.post120" \
+        -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
     "paddleocr==2.7.3" \
     "opencv-python-headless==4.8.1.78" \
     "Pillow"
 
 # ── Stage 2: PyTorch + HuggingFace ───────────────────────────
 echo "=== Installing PyTorch + Transformers stack ==="
-pip install --target="$PYPACKAGES" --quiet \
+$PIP install --target="$PYPACKAGES" --quiet \
     "torch==2.2.0" --index-url https://download.pytorch.org/whl/cu121
-pip install --target="$PYPACKAGES" --quiet \
+$PIP install --target="$PYPACKAGES" --quiet \
     "transformers==4.41.2" \
     "accelerate>=0.27" \
     "sentencepiece"
 
 # ── Stage 3: RunPod + runtime deps ───────────────────────────
 echo "=== Installing RunPod + runtime helpers ==="
-pip install --target="$PYPACKAGES" --quiet \
+$PIP install --target="$PYPACKAGES" --quiet \
     "runpod" \
     "requests"
 
 # ── Download PaddleOCR models ────────────────────────────────
 echo "=== Downloading PaddleOCR models ==="
-PYTHONPATH="$PYPACKAGES" python3 - <<'EOF'
+PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 sys.path.insert(0, os.environ["PYTHONPATH"])
 from paddleocr import PaddleOCR
@@ -86,14 +93,14 @@ fi
 
 # ── Download TrOCR ───────────────────────────────────────────
 echo "=== Downloading TrOCR: $TROCR_CHECKPOINT ==="
-PYTHONPATH="$PYPACKAGES" python3 - <<EOF
+PYTHONPATH="$PYPACKAGES" python3.10 - <<EOF
 import os, sys, torch
 sys.path.insert(0, os.environ["PYTHONPATH"])
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
 ckpt  = "${TROCR_CHECKPOINT}"
 cache = os.environ["HF_HOME"]
-print(f"Downloading {ckpt} → {cache}")
+print(f"Downloading {ckpt} -> {cache}")
 TrOCRProcessor.from_pretrained(ckpt, cache_dir=cache)
 VisionEncoderDecoderModel.from_pretrained(ckpt, cache_dir=cache, torch_dtype=torch.float16)
 print("TrOCR ready.")
@@ -128,7 +135,7 @@ OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5vl
 OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5:7b-instruct-q4_K_M
 kill "$OLLAMA_PID" 2>/dev/null || true
 
-# ── Verify Ollama manifests (tag-level, matches handler.py exactly) ──
+# ── Verify Ollama manifests (tag-level) ──────────────────────
 echo "=== Verifying Ollama manifests ==="
 MANIFEST_BASE="$OLLAMA_MODELS/manifests/registry.ollama.ai/library"
 REQUIRED_MODELS=("qwen2.5vl:7b-q8_0" "qwen2.5:7b-instruct-q4_K_M")
@@ -139,22 +146,17 @@ for MODEL_TAG in "${REQUIRED_MODELS[@]}"; do
     TAG="${MODEL_TAG##*:}"
     MANIFEST_FILE="$MANIFEST_BASE/$NAME/$TAG"
     if [ -f "$MANIFEST_FILE" ]; then
-        echo "✅ $MODEL_TAG manifest present ($MANIFEST_FILE)"
+        echo "✅ $MODEL_TAG manifest present"
     else
         echo "❌ ERROR: $MODEL_TAG manifest missing — expected $MANIFEST_FILE"
-        if [ -d "$MANIFEST_BASE/$NAME" ]; then
-            echo "   Tags found under $NAME: $(ls "$MANIFEST_BASE/$NAME")"
-        else
-            echo "   No directory found at $MANIFEST_BASE/$NAME"
-        fi
+        [ -d "$MANIFEST_BASE/$NAME" ] \
+            && echo "   Tags found: $(ls "$MANIFEST_BASE/$NAME")" \
+            || echo "   No directory at $MANIFEST_BASE/$NAME"
         MANIFEST_ERRORS=$((MANIFEST_ERRORS + 1))
     fi
 done
 
-if [ "$MANIFEST_ERRORS" -gt 0 ]; then
-    echo "❌ $MANIFEST_ERRORS model(s) failed manifest verification."
-    exit 1
-fi
+[ "$MANIFEST_ERRORS" -gt 0 ] && { echo "❌ $MANIFEST_ERRORS model(s) failed verification."; exit 1; }
 
 # ── Final summary ─────────────────────────────────────────────
 echo ""
