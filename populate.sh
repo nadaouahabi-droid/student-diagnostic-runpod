@@ -53,7 +53,7 @@ echo "=== Installing PaddleOCR stack ==="
 #   Correct index:   cuda12.1  (not cudnn8.6-cuda12.0)
 $PIP install --target="$PYPACKAGES" --quiet \
     "numpy==1.24.4" \
-    "paddlepaddle-gpu==2.6.1.post120" \
+    "paddlepaddle-gpu==2.6.1" \
         -f https://www.paddlepaddle.org.cn/whl/linux/cudnn8.9-cuda12.1/stable.html \
     "paddleocr==2.7.3" \
     "opencv-python-headless==4.8.1.78" \
