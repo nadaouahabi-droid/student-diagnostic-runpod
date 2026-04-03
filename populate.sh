@@ -26,8 +26,16 @@ TROCR_CHECKPOINT="microsoft/trocr-base-handwritten"
 # ── System deps ──────────────────────────────────────────────
 echo "=== Installing system deps ==="
 apt-get update -qq && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-venv python3.10-distutils curl ca-certificates \
+    software-properties-common \
+    python3.10 python3.10-venv python3.10-distutils \
+    curl ca-certificates \
     libglib2.0-0 libgl1
+
+# Upgrade libstdc++ to support Paddle (fix GLIBCXX error)
+echo "=== Upgrading libstdc++ (fix GLIBCXX) ==="
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get update -qq && apt-get install -y --no-install-recommends \
+    libstdc++6
 
 # ── FIX 1: pin all pip/python calls to python3.10 explicitly ─
 # The RunPod base image defaults to python3.13 for bare `pip`
