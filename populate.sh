@@ -78,15 +78,31 @@ $PIP install --target="$PYPACKAGES" --quiet \
 echo "=== Downloading PaddleOCR models ==="
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
+
+# Force correct cache path BEFORE imports
+os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
+os.environ["PPOCR_HOME"] = os.environ["PADDLEOCR_HOME"]
+
 sys.path.insert(0, os.environ["PYTHONPATH"])
+
+import paddle
 from paddleocr import PaddleOCR
 from PIL import Image
 
 print("Downloading PaddleOCR models into", os.environ["PADDLEOCR_HOME"])
-ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False)
+
+use_gpu = False  # keep stable
+
+ocr = PaddleOCR(
+    use_angle_cls=True,
+    lang="en",
+    use_gpu=use_gpu
+)
+
 img = Image.new("RGB", (200, 50), color="white")
 img.save("/tmp/test_ocr.png")
 ocr.ocr("/tmp/test_ocr.png")
+
 print("PaddleOCR models ready.")
 EOF
 
