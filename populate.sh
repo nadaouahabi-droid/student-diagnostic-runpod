@@ -1,13 +1,6 @@
 #!/bin/bash
 # ============================================================
 # Populate RunPod Network Volume
-# Changes vs original:
-#   - Manifest check verifies name:tag files, not just directories
-#     (matches handler.py verify_models_on_volume logic exactly)
-#   - pip install split into two stages so a torch failure doesn't
-#     silently skip paddle and vice-versa
-#   - Minor: set -euo pipefail already present, kept; added ||true on
-#     ollama kill to suppress "no process" noise
 # ============================================================
 set -euo pipefail
 
@@ -149,7 +142,6 @@ for MODEL_TAG in "${REQUIRED_MODELS[@]}"; do
         echo "✅ $MODEL_TAG manifest present ($MANIFEST_FILE)"
     else
         echo "❌ ERROR: $MODEL_TAG manifest missing — expected $MANIFEST_FILE"
-        # Show what's actually there to aid debugging
         if [ -d "$MANIFEST_BASE/$NAME" ]; then
             echo "   Tags found under $NAME: $(ls "$MANIFEST_BASE/$NAME")"
         else
