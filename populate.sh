@@ -83,7 +83,8 @@ from paddleocr import PaddleOCR
 from PIL import Image
 
 print("Downloading PaddleOCR models into", os.environ["PADDLEOCR_HOME"])
-ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=True)
+use_gpu = paddle.device.is_compiled_with_cuda()
+ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=use_gpu)
 img = Image.new("RGB", (200, 50), color="white")
 img.save("/tmp/test_ocr.png")
 ocr.ocr("/tmp/test_ocr.png")
