@@ -106,6 +106,10 @@ ocr.ocr("/tmp/test_ocr.png")
 print("PaddleOCR models ready.")
 EOF
 
+echo "=== Syncing PaddleOCR cache to volume ==="
+mkdir -p "$PADDLEOCR_HOME"
+cp -r /root/.paddleocr/* "$PADDLEOCR_HOME"/ 2>/dev/null || true
+
 echo "=== Verifying PaddleOCR cache ==="
 if [ -d "$PADDLEOCR_HOME" ] && [ "$(ls -A "$PADDLEOCR_HOME")" ]; then
     echo "✅ PaddleOCR models present:"
