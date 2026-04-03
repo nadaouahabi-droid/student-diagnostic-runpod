@@ -54,7 +54,7 @@ echo "=== Installing PaddleOCR stack ==="
 $PIP install --target="$PYPACKAGES" --quiet \
     "numpy==1.24.4" \
     "paddlepaddle-gpu==2.6.1.post120" \
-        -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html \
+        -f https://www.paddlepaddle.org.cn/whl/linux/cudnn8.9-cuda12.1/stable.html \
     "paddleocr==2.7.3" \
     "opencv-python-headless==4.8.1.78" \
     "Pillow"
@@ -62,10 +62,11 @@ $PIP install --target="$PYPACKAGES" --quiet \
 # ── Stage 2: PyTorch + HuggingFace ───────────────────────────
 echo "=== Installing PyTorch + Transformers stack ==="
 $PIP install --target="$PYPACKAGES" --quiet \
-    "torch==2.2.0" --index-url https://download.pytorch.org/whl/cu121
+    "torch==2.1.2" --index-url https://download.pytorch.org/whl/cu121
+
 $PIP install --target="$PYPACKAGES" --quiet \
-    "transformers==4.41.2" \
-    "accelerate>=0.27" \
+    "transformers==4.36.2" \
+    "accelerate==0.25.0" \
     "sentencepiece"
 
 # ── Stage 3: RunPod + runtime deps ───────────────────────────
@@ -79,9 +80,10 @@ echo "=== Downloading PaddleOCR models ==="
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 
-# Force correct cache path BEFORE imports
+# 🔥 FORCE BEFORE ANY IMPORT
+os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache"
 os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
-os.environ["PPOCR_HOME"] = os.environ["PADDLEOCR_HOME"]
+os.environ["PPOCR_HOME"]     = os.environ["PADDLEOCR_HOME"]
 
 sys.path.insert(0, os.environ["PYTHONPATH"])
 
@@ -91,13 +93,9 @@ from PIL import Image
 
 print("Downloading PaddleOCR models into", os.environ["PADDLEOCR_HOME"])
 
-use_gpu = False  # keep stable
+use_gpu = False  # safe for volume population
 
-ocr = PaddleOCR(
-    use_angle_cls=True,
-    lang="en",
-    use_gpu=use_gpu
-)
+ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=use_gpu)
 
 img = Image.new("RGB", (200, 50), color="white")
 img.save("/tmp/test_ocr.png")
@@ -107,8 +105,9 @@ print("PaddleOCR models ready.")
 EOF
 
 echo "=== Syncing PaddleOCR cache to volume ==="
-mkdir -p "$PADDLEOCR_HOME"
-cp -r /root/.paddleocr/* "$PADDLEOCR_HOME"/ 2>/dev/null || true
+if [ -d "/root/.paddleocr" ]; then
+    rsync -a /root/.paddleocr/ "$PADDLEOCR_HOME"/
+fi
 
 echo "=== Verifying PaddleOCR cache ==="
 if [ -d "$PADDLEOCR_HOME" ] && [ "$(ls -A "$PADDLEOCR_HOME")" ]; then
