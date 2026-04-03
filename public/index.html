@@ -612,16 +612,12 @@ async function runpodCall(input, timeoutMs = 600000) {
   }
 }
 
-// ── OCR PIPELINE — Ollama-only (vision model per page → text model analysis) ──
-// Stage 1: Ollama vision model reads each page directly from the image.
-//          No external OCR (PaddleOCR / TrOCR) is used.
-// Stage 2: Ollama text model aggregates page transcripts → structured JSON.
+// ── OCR PIPELINE ──
 async function callOCRPipeline(prompt, images, customSystemMsg) {
   const visionModel = DEFAULT_VISION_MODEL;
   const textModel   = DEFAULT_TEXT_MODEL;
   const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
-  // Text-only path (no images uploaded)
   if (!images || !images.length) {
     updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
     const out = await runpodCall({
@@ -637,7 +633,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     return out.content || '';
   }
 
-  // Stage 1 — Ollama vision model reads each page image directly
   const pageInterpretations = [];
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
@@ -682,11 +677,9 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
     }
   }
 
-  // Stage 2 — Text model produces structured diagnostic JSON from page transcripts
   updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
   const combined   = pageInterpretations.join('\n\n');
 
-  // Pre-count all questions mentioned across all page transcripts so we can inject the expected count
   const pageQuestionCounts = pageInterpretations.map(pt => {
     const matches = pt.match(/^Q[\w()]+:/gm) || [];
     return matches.length;
@@ -710,7 +703,6 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
   return finalOut.content || '';
 }
 
-// ── OLLAMA COMPATIBILITY ALIASES ──
 async function callOllama(prompt, images) {
   return callOCRPipeline(prompt, images);
 }
@@ -833,11 +825,12 @@ function normalizeAnalysis(d) {
       marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
       marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
       questionText:q.questionText||'',topic:q.topic||'Unknown',
-      _origIdx: idx   // preserve insertion order as stable tiebreaker
+      _origIdx: idx
     }));
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
-    function _parseQ(num){const m=String(num).match(/^(\d+)([a-zA-Z]*)(?:\(([ivxlcdmIVXLCDM]+)\))?/);return m?[parseInt(m[1]||0),(m[2]||'').toLowerCase(),_romanIdx[(m[3]||'').toLowerCase()]||0]:[0,'',0];}
+    function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
+    const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
     const totalAvail=d.questions.reduce((s,q)=>s+q.marksAvailable,0);
     const totalAwarded=d.questions.reduce((s,q)=>s+q.marksAwarded,0);
     if(totalAvail>0){d.totalMarks=totalAvail;d.marksObtained=totalAwarded;}
@@ -1067,6 +1060,7 @@ RULES FOR questions array:
 - ORDERING: list questions in the EXACT order they appear in the exam — do NOT reorder by topic, difficulty, or any other criterion. Page 1 questions first, then Page 2, etc. Within each page, top-to-bottom order.
 - COMPLETENESS: include EVERY question and sub-question. If a question was left blank by the student, still include it with marksAwarded: 0.
 - number: the question identifier as a STRING — use the exact label from the exam e.g. "1", "2", "3", or with sub-part letter "1a", "1b", "2c" (no spaces, no leading "Q")
+- Sub-sub-questions use format "1a(i)", "1a(ii)" or "1(a)(i)", "1(a)(ii)" — keep parens as-is
 - If question 1 has sub-parts (a), (b), (c), list each as a SEPARATE entry: "1a", "1b", "1c" — do NOT merge them into a single "1" entry
 - If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
 - questionText: a brief (max 12 word) description of what the question asks — taken directly from the exam
@@ -1090,24 +1084,43 @@ RULES FOR topicPerformance:
 }
 
 // ── FORMAT HELPERS ──
+// Parses question identifiers supporting:
+//   "1", "1a", "1(a)", "1a(i)", "1(a)(i)", "1(a)(ii)" etc.
 function _parseQ(id) {
-  const m = String(id).match(/^(\d+)([a-z]?)(?:\(([ivxlcdm]+)\))?/i);
+  const m = String(id).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdm]+)\))?/i);
   if (!m) return [0,'',0];
   const romanMap={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10};
-  const roman=m[3]?(romanMap[(m[3]||'').toLowerCase()]||0):0;
-  return [parseInt(m[1])||0,(m[2]||'').toLowerCase(),roman];
+  const letter=(m[2]||m[3]||'').toLowerCase();
+  const roman=m[4]?(romanMap[(m[4]||'').toLowerCase()]||0):0;
+  return [parseInt(m[1])||0,letter,roman];
 }
+
+// Formats a raw question number string into a display label.
+// "1"      → "Q1"
+// "1a"     → "Q1(a)"
+// "1(a)"   → "Q1(a)"
+// "1a(i)"  → "Q1(a)(i)"
+// "1(a)(i)"→ "Q1(a)(i)"
 function fmtQ(num) {
   const s = String(num || '').replace(/^Q/i, '');
-  const m = s.match(/^(\d+)([a-zA-Z]+)/);
-  if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
-  return 'Q' + s;
+  const m = s.match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/i);
+  if (!m) return 'Q' + s;
+  let out = 'Q' + m[1];
+  const letter = m[2] || m[3];
+  if (letter) out += '(' + letter.toLowerCase() + ')';
+  if (m[4]) out += '(' + m[4].toLowerCase() + ')';
+  return out;
 }
+
 function fmtQLabel(label) {
   const s = String(label || '');
-  const m = s.match(/^Q(\d+)([a-zA-Z]+)/i);
-  if (m) return 'Q' + m[1] + '(' + m[2].toLowerCase() + ')';
-  return s;
+  const m = s.match(/^Q(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/i);
+  if (!m) return s;
+  let out = 'Q' + m[1];
+  const letter = m[2] || m[3];
+  if (letter) out += '(' + letter.toLowerCase() + ')';
+  if (m[4]) out += '(' + m[4].toLowerCase() + ')';
+  return out;
 }
 
 function renderAnalysis(d) {
@@ -1300,6 +1313,8 @@ function renderReport(r) {
       const pA=_parseQ(idA),pB=_parseQ(idB);
       return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2];
     });
+    const _rSeen=new Set();
+    qbSource=qbSource.filter(q=>{const k=String(q.question||'').replace(/^Q/i,'').trim().toLowerCase().replace(/[\s()]/g,'');if(_rSeen.has(k))return false;_rSeen.add(k);return true;});
   }
 
   const qbRows = qbSource.map(q => {
