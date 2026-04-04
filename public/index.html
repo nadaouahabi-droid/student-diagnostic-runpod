@@ -205,6 +205,7 @@ select{cursor:pointer}
 .ws-textarea.mc-answer{min-height:36px}
 .ws-textarea.explanation{min-height:100px}
 .ws-textarea.answered{border-color:var(--teal)}
+.ws-field-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;display:block}
 .ws-feedback{margin-top:10px;border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--border)}
 .ws-feedback-correct{background:var(--green-light);border-color:rgba(40,168,112,0.3);padding:10px 14px}
 .ws-feedback-wrong{background:var(--red-light);border-color:rgba(224,76,76,0.25);padding:10px 14px}
@@ -378,53 +379,7 @@ function switchMode(m) {
   document.getElementById('both-section').style.display  = m === 'both'  ? 'block' : 'none';
 }
 
-// ── CLIENT-SIDE CANVAS PREPROCESSOR ─────────────────────────────────────────
-function preprocessCanvasForOCR(srcCanvas) {
-  const w = srcCanvas.width, h = srcCanvas.height;
-  const dst = document.createElement('canvas');
-  dst.width = w; dst.height = h;
-  const ctx = dst.getContext('2d');
-
-  ctx.drawImage(srcCanvas, 0, 0);
-  const id = ctx.getImageData(0, 0, w, h);
-  const d  = id.data;
-
-  for (let i = 0; i < d.length; i += 4) {
-    const g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-    d[i] = d[i+1] = d[i+2] = g;
-  }
-
-  const blurred = new Uint8ClampedArray(d.length);
-  const r = 2; 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let sum = 0, count = 0;
-      for (let ky = -r; ky <= r; ky++) {
-        for (let kx = -r; kx <= r; kx++) {
-          const nx = x + kx, ny = y + ky;
-          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-            sum += d[(ny * w + nx) * 4];
-            count++;
-          }
-        }
-      }
-      const idx = (y * w + x) * 4;
-      blurred[idx] = blurred[idx+1] = blurred[idx+2] = sum / count;
-      blurred[idx+3] = 255;
-    }
-  }
-  const amount = 1.4;
-  for (let i = 0; i < d.length; i += 4) {
-    const sharpened = Math.min(255, Math.max(0,
-      d[i] + amount * (d[i] - blurred[i])
-    ));
-    d[i] = d[i+1] = d[i+2] = sharpened;
-  }
-
-  ctx.putImageData(id, 0, 0);
-  return dst;
-}
-
+// ── FILE HANDLING ──
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
@@ -524,27 +479,14 @@ async function handlePDF(file) {
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     for (let p = 1; p <= pdf.numPages; p++) {
       prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
-      const page = await pdf.getPage(p);
-
-      // ── IMPROVEMENT 1: Higher render scale (3.0 vs 2.5) ─────────────────
-      // More pixels = significantly better OCR on small handwriting.
-      // 3.0× at A4 300dpi ≈ 2481×3508px — well within the 2400px cap below.
-      const viewport = page.getViewport({ scale: 3.0 });
+      const page     = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 2.5 });
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-
-      // ── IMPROVEMENT 2: Client-side preprocessing ──────────────────────────
-      // Grayscale + unsharp mask before encoding. Free — runs in browser.
-      // Increases contrast of ink strokes and reduces paper texture noise.
-      const processedCanvas = preprocessCanvasForOCR(canvas);
-
-      // ── IMPROVEMENT 3: Larger max size cap (2400 vs 2200) ─────────────────
-      // Paired with the higher render scale so we don't discard the extra
-      // detail. Quality slightly reduced to 0.88 to keep file sizes similar.
       APP.images.push({
-        base64:   compressCanvas(processedCanvas, 2400, 0.88),
+        base64:   compressCanvas(canvas, 2200, 0.9),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
@@ -670,36 +612,6 @@ async function runpodCall(input, timeoutMs = 600000) {
   }
 }
 
-// ── HANDWRITING DISAMBIGUATION RULES ────────────────────────────────────────
-// Injected into every per-page vision prompt to reduce common misreads
-// in messy exam scripts, especially for numerals and similar-looking letters.
-const HANDWRITING_RULES = `
-HANDWRITING DISAMBIGUATION — apply these rules to every ambiguous character:
-- 1 vs l vs I:  context decides — 1 appears in numbers/marks, l/I in words
-- 0 vs O vs o:  0 in maths/marks, O/o in words
-- 2 vs Z vs z:  2 in maths/marks, Z/z in words
-- 7 vs 1:       7 always has a diagonal top stroke or crossbar
-- 9 vs 4 vs q:  9 closes at the top, 4 is open at the top, q has a descender
-- u vs v vs n:  u curves at the bottom, v is pointed, n has a flat bottom
-- r vs n vs m:  r is a half-arch, n has two full legs, m has three
-- 6 vs b:       6 curves inward at the top, b has a straight vertical stem
-- 8 vs 3:       8 is closed top and bottom, 3 opens to the left
-
-MARK SYMBOLS:
-- Tick (check mark / ✓): counts as 1 mark awarded — record as AWARDED
-- Double tick (✓✓): counts as 2 marks unless a circled number overrides
-- Cross (✗ or X): answer incorrect — 0 marks for that item
-- Circled or boxed number at bottom of page: always record as [PAGE SCORE: N]
-- Partial mark written as fraction (e.g. 1/2): record as [PARTIAL: 0.5]
-- Ink colour change (teacher corrections in red or green): label as TEACHER NOTE
-
-ANNOTATION RULES:
-- Crossed-out text: prefix with DELETED: and also record the replacement if present
-- Underlined text: transcribe as-is, note as UNDERLINED if it changes meaning
-- Margin arrows or circles pointing to text: note what they point to with ARROW TO:
-- If a character is genuinely illegible after applying all rules above: write [?]
-  — NEVER guess a specific digit or letter when unsure. [?] is always the right call.`;
-
 // ── OCR PIPELINE ──
 async function callOCRPipeline(prompt, images, customSystemMsg) {
   const visionModel = DEFAULT_VISION_MODEL;
@@ -729,9 +641,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       i, images.length
     );
 
-    // ── IMPROVEMENT 4: Handwriting disambiguation injected into every page prompt
     const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
-${HANDWRITING_RULES}
 ${mathOCRRules()}
 STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
 "Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
@@ -754,7 +664,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
         action: 'ollama-chat',
         model: visionModel,
         messages: [
-          { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately. When a character is ambiguous or illegible, write [?] rather than guessing.' },
+          { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately.' },
           { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
         options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
@@ -784,7 +694,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
     action: 'ollama-chat',
     model: textModel,
     messages: [
-      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. No trailing commas. ASCII text only in string values. ORDERING RULE: list questions in the exact order they appear in the exam — page 1 questions first, then page 2, etc. Never reorder questions by topic or any other criterion. COMPLETENESS RULE: every question block in the EXAM CONTENT must appear as an entry in the questions array — none may be omitted. [?] tokens in the OCR transcript indicate illegible characters — treat them as unknown and do not invent values for them.' },
+      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. No trailing commas. ASCII text only in string values. ORDERING RULE: list questions in the exact order they appear in the exam — page 1 questions first, then page 2, etc. Never reorder questions by topic or any other criterion. COMPLETENESS RULE: every question block in the EXAM CONTENT must appear as an entry in the questions array — none may be omitted.' },
       { role: 'user', content: fullPrompt }
     ],
     options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
@@ -1142,7 +1052,6 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
 5. TEACHER MARK RULE: if the teacher has written a mark in a different ink and it shows 0 for a question or sub-question, record marksAwarded as 0 (the student's answer is wrong) — UNLESS the 0 has been visibly crossed out and replaced with a higher value, or there is an explicit additive annotation such as "(+1)" next to it.
-6. [?] tokens in the OCR transcript represent illegible characters — do not invent values for them; flag the affected field as unclear in your analysis notes.
 
 ${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only. CRITICAL JSON RULES: (1) Never put double-quote characters inside string values — use parentheses instead. (2) Never put raw newlines or tabs inside string values — use a space. (3) All string values must contain ASCII only — no math symbols, use x^2 not ², sqrt() not √. (4) No trailing commas before } or ].
 {"overallScore":0,"totalMarks":0,"marksObtained":0,"grade":"","performanceSummary":"summary here","questions":[{"number":"1","questionText":"brief question text","topic":"Topic Name","marksAvailable":2,"marksAwarded":1},{"number":"1a","questionText":"sub-question a text","topic":"Topic Name","marksAvailable":1,"marksAwarded":0}],"topicPerformance":[{"topic":"Topic Name","score":0,"level":"weak","questionsAttempted":1,"marksAvailable":4,"marksAwarded":1,"mistakes":1}],"keyMistakes":[{"title":"Mistake title","description":"Exactly what the student did wrong, what they should have done, and the likely cause","frequency":"once","topic":"Topic","errorType":"arithmetic slip|sign error|method error|incomplete working|misread question|unit error|conceptual gap"}],"strengths":["strength 1"],"weaknesses":["weakness 1"],"urgentGaps":["gap 1"]}
@@ -1175,6 +1084,8 @@ RULES FOR topicPerformance:
 }
 
 // ── FORMAT HELPERS ──
+// Parses question identifiers supporting:
+//   "1", "1a", "1(a)", "1a(i)", "1(a)(i)", "1(a)(ii)" etc.
 function _parseQ(id) {
   const m = String(id).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdm]+)\))?/i);
   if (!m) return [0,'',0];
@@ -1184,6 +1095,12 @@ function _parseQ(id) {
   return [parseInt(m[1])||0,letter,roman];
 }
 
+// Formats a raw question number string into a display label.
+// "1"      → "Q1"
+// "1a"     → "Q1(a)"
+// "1(a)"   → "Q1(a)"
+// "1a(i)"  → "Q1(a)(i)"
+// "1(a)(i)"→ "Q1(a)(i)"
 function fmtQ(num) {
   const s = String(num || '').replace(/^Q/i, '');
   const m = s.match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/i);
@@ -1587,13 +1504,14 @@ function renderPlan(p) {
     </div>`;
 }
 
-function preprocessWorksheetJSON(raw) {
+  function preprocessWorksheetJSON(raw) {
   let s = raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
+  // "…"  whitespace/newline  "…"  where the second " is NOT a key (not followed by :)
   s = s.replace(/"([ \t]*\n[ \t]*)"(?![ \t]*:)/g, '",\n"');
   s = s.replace(/"([ \t]{2,})"(?![ \t]*:)/g,      '","');
   return s;
 }
-
+  
 // ── WORKSHEET ──
 async function generateWorksheet() {
   goPage('worksheet');
