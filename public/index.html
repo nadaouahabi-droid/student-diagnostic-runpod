@@ -827,6 +827,24 @@ function normalizeAnalysis(d) {
       questionText:q.questionText||'',topic:q.topic||'Unknown',
       _origIdx: idx
     }));
+
+    // ── FIX 1: Re-extract marksAvailable from questionText when it is 0 ──
+    // The vision model sometimes puts the mark allocation inside the question text
+    // as [2], (2), [2 marks], (2 marks) etc. rather than in the marksAvailable field.
+    d.questions = d.questions.map(q => {
+      if (q.marksAvailable === 0 && q.questionText) {
+        const mm = q.questionText.match(/\[(\d+)\s*marks?\]/i)
+                || q.questionText.match(/\((\d+)\s*marks?\)/i)
+                || q.questionText.match(/\[(\d+)\]/)
+                || q.questionText.match(/\((\d+)\)/);
+        if (mm) {
+          const extracted = parseInt(mm[1], 10);
+          if (extracted > 0) q.marksAvailable = extracted;
+        }
+      }
+      return q;
+    });
+
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
@@ -841,6 +859,26 @@ function normalizeAnalysis(d) {
       if(norm.length>4)_textSeen.add(norm);
       return true;
     });
+
+    // ── FIX 2: Remove parent questions when sub-questions exist ──
+    // If Q1 has children Q1(a) and Q1(b), display only the children.
+    // If Q1(a) has children Q1(a)(i) and Q1(a)(ii), display only the children.
+    // This prevents duplicate rows like [Q1, Q1(a), Q1(b)] — only [Q1(a), Q1(b)] shown.
+    d.questions = d.questions.filter(q => {
+      const num = String(q.number);
+      const hasChildren = d.questions.some(other => {
+        const oNum = String(other.number);
+        if (oNum === num) return false;
+        if (!oNum.startsWith(num)) return false;
+        // The character immediately after the parent prefix must be a letter or '('
+        // to confirm it is a genuine child (e.g. "1a" or "1(a)"), not a different
+        // question that happens to start with the same digit (e.g. "10" vs "1").
+        const suffix = oNum.slice(num.length);
+        return /^[a-zA-Z(]/.test(suffix);
+      });
+      return !hasChildren;
+    });
+
     const totalAvail=d.questions.reduce((s,q)=>s+q.marksAvailable,0);
     const totalAwarded=d.questions.reduce((s,q)=>s+q.marksAwarded,0);
     if(totalAvail>0){d.totalMarks=totalAvail;d.marksObtained=totalAwarded;}
@@ -1095,8 +1133,6 @@ RULES FOR topicPerformance:
 }
 
 // ── FORMAT HELPERS ──
-// Parses question identifiers supporting:
-//   "1", "1a", "1(a)", "1a(i)", "1(a)(i)", "1(a)(ii)" etc.
 function _parseQ(id) {
   const m = String(id).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdm]+)\))?/i);
   if (!m) return [0,'',0];
@@ -1106,12 +1142,6 @@ function _parseQ(id) {
   return [parseInt(m[1])||0,letter,roman];
 }
 
-// Formats a raw question number string into a display label.
-// "1"      → "Q1"
-// "1a"     → "Q1(a)"
-// "1(a)"   → "Q1(a)"
-// "1a(i)"  → "Q1(a)(i)"
-// "1(a)(i)"→ "Q1(a)(i)"
 function fmtQ(num) {
   const s = String(num || '').replace(/^Q/i, '');
   const m = s.match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/i);
@@ -1427,27 +1457,59 @@ async function runPlan() {
   const studentName = safeStr(APP.studentName);
   const grade       = safeStr(APP.grade);
   const subject     = safeStr(APP.subject);
+  const currentScore = d.overallScore || 0;
+
+  // ── FIX 3: Target must always exceed the student's current score ──
+  // Add at least 12 points, never exceed 100, never below 60.
+  const minTarget = Math.min(100, Math.max(currentScore + 12, 60));
+
   const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>safeStr(t.topic)).join(', ')||'none';
   const devTopics   = (d.topicPerformance||[]).filter(t=>t.level==='developing').map(t=>safeStr(t.topic)).join(', ')||'none';
+  const strongTopics= (d.topicPerformance||[]).filter(t=>t.level==='strong').map(t=>safeStr(t.topic)).join(', ')||'none';
   const mistakes    = (d.keyMistakes||[]).map(m=>safeStr(m.title)).join(', ')||'none';
+  const urgentGaps  = (d.urgentGaps||[]).map(s=>safeStr(s)).join(', ')||'none';
+  const primaryWeak = (d.topicPerformance||[]).filter(t=>t.level==='weak')[0];
+  const secondWeak  = (d.topicPerformance||[]).filter(t=>t.level==='weak')[1];
+  const thirdArea   = (d.topicPerformance||[]).filter(t=>t.level!=='strong')[2];
+  const w1focus     = safeStr(primaryWeak ? primaryWeak.topic : weakTopics.split(',')[0] || subject).slice(0,45);
+  const w2focus     = safeStr(secondWeak  ? secondWeak.topic  : weakTopics.split(',')[1] || w1focus).slice(0,45);
+  const w3focus     = safeStr(thirdArea   ? thirdArea.topic   : devTopics.split(',')[0]  || subject).slice(0,45);
 
-  const prompt = `Create a personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes anywhere. Keep every string value under 80 characters. No newlines inside strings.
+  const prompt = `Create a detailed personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes anywhere. Keep every string value under 80 characters. No newlines inside strings.
 
-Student: ${studentName}, ${grade}, ${subject}, current score: ${d.overallScore}%
+Student: ${studentName}, ${grade}, ${subject}
+Current score: ${currentScore}%
+Target score: ${minTarget}% (this is the targetScore value — do NOT change it)
 Weak topics: ${weakTopics}
 Developing topics: ${devTopics}
-Mistakes: ${mistakes}
+Strong topics: ${strongTopics}
+Key mistakes: ${mistakes}
+Urgent gaps: ${urgentGaps}
 
-STRICT JSON RULES:
-- No apostrophes (use "do not" not "don't", "it is" not "it's")
-- No special characters or symbols
-- All string values under 80 characters
+STRICT JSON RULES — violating any of these will break parsing:
+- No apostrophes anywhere (write "do not" not "don't", "it is" not "it's", "students" not "student's")
+- No special characters, symbols, or non-ASCII characters in any string value
+- All string values must be under 80 characters
 - Exactly 4 week steps, exactly 3 actions per step, exactly 1 resource per step
-- dailyHabits: exactly 3 items
-- examTips: exactly 3 items
+- dailyHabits: exactly 3 items, each under 70 characters
+- examTips: exactly 3 items, each under 70 characters
+- targetScore must be exactly ${minTarget} — do not change this value
+- timeframe must be exactly "4 weeks"
 
-Return this exact structure with real content replacing placeholders:
-{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"Top weak topic name here","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Measurable week 1 goal"},{"week":2,"title":"Practice Week","focus":"Second weak topic","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Week 2 goal"},{"week":3,"title":"Consolidation Week","focus":"Third area","actions":["Action one","Action two","Action three"],"resources":["Resource name here"],"milestone":"Week 3 goal"},{"week":4,"title":"Exam Prep Week","focus":"Review and timed practice","actions":["Action one","Action two","Action three"],"resources":["Past papers"],"milestone":"Final readiness goal"}],"dailyHabits":["Habit one","Habit two","Habit three"],"examTips":["Tip one","Tip two","Tip three"]}
+CONTENT RULES — make the plan specific and actionable:
+- Week 1 focus: "${w1focus}" — the student's single weakest area
+- Week 2 focus: "${w2focus}" — the second priority gap
+- Week 3 focus: "${w3focus}" — consolidation of weak and developing areas
+- Week 4 focus: timed exam practice and review
+- Each action must name a specific activity (not generic advice like "study more")
+- Each resource must be a real named resource (textbook chapter, website, past paper)
+- Each milestone must be measurable (e.g. "Score 5/6 on practice questions for ${w1focus}")
+- Actions for Week 1 should directly address the exact mistakes found: ${mistakes}
+- Daily habits should be specific to ${subject}
+- Exam tips should reflect the student's specific error patterns
+
+Return this exact JSON structure:
+{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation: ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["Review core rules and definitions for ${w1focus.slice(0,25)}","Redo the questions missed in this exam from scratch","Complete 15 targeted practice questions with worked solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score at least 70 percent on a ${w1focus.slice(0,20)} mini-test"},{"week":2,"title":"Build: ${w2focus.slice(0,32)}","focus":"${w2focus}","actions":["Watch two tutorial videos on ${w2focus.slice(0,25)}","Complete one full topic past paper section","Write a summary of key methods in own words"],"resources":["${isMath()?'Khan Academy '+w2focus.slice(0,20)+' videos':'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"Complete all ${w2focus.slice(0,20)} practice questions with no concept errors"},{"week":3,"title":"Consolidate Mixed Topics","focus":"${w3focus}","actions":["Do mixed-topic timed drills covering all weak areas","Identify and rewrite any remaining error patterns","Attempt a full practice paper under timed conditions"],"resources":["${isMath()?'DrFrostMaths mixed topic set':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on a mixed practice paper"},{"week":4,"title":"Exam Readiness","focus":"Timed practice and review","actions":["Complete two full past papers under real exam conditions","Mark each paper using the mark scheme and note errors","Rest well and review one page of key notes each day"],"resources":["${isMath()?'Exam board official past papers':'Past exam papers with mark schemes'}"],"milestone":"Feel confident with all topics and score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["Spend 20 minutes on ${subject} practice every day","Write out key formulas or rules from memory before checking","Review any question you got wrong before moving on"],"examTips":["${isMath()?'Show all working even if unsure — method marks are available':'Re-read the question twice before writing your answer'}","Check your answer makes sense before moving to the next question","${isMath()?'Underline key numbers and operations in word problems':'Plan your answer briefly before writing in full'}"]}
 
 ${mathPlanExtras()}`;
 
@@ -1456,7 +1518,7 @@ ${mathPlanExtras()}`;
       action: 'ollama-chat',
       model: DEFAULT_TEXT_MODEL,
       messages: [
-        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters.' },
+        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters. The targetScore field must be exactly the number provided in the prompt — do not change it.' },
         { role: 'user', content: p }
       ],
       options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192 },
@@ -1465,18 +1527,27 @@ ${mathPlanExtras()}`;
   }
 
   try {
-    const raw = await planCall(prompt);
-    APP.plan  = parseJSON(raw);
+    const raw  = await planCall(prompt);
+    let plan   = parseJSON(raw);
+    // Enforce target > current score regardless of what the model returned
+    if (!plan.targetScore || plan.targetScore <= currentScore) {
+      plan.targetScore = minTarget;
+    }
+    APP.plan = plan;
     renderPlan(APP.plan);
   } catch(e) {
     try {
       document.getElementById('plan-content').innerHTML =
         `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Retrying with simpler plan…</div></div>`;
-      const simplePrompt = `Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only.
-Action plan for ${studentName} studying ${subject}. Weak areas: ${weakTopics||subject}.
-{"targetScore":75,"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation","focus":"${(weakTopics.split(',')[0]||subject).trim().slice(0,40)}","actions":["Review core concepts","Practice 10 questions","Check answers carefully"],"resources":["Textbook chapter 1"],"milestone":"Complete topic review"},{"week":2,"title":"Practice","focus":"${(weakTopics.split(',')[1]||weakTopics.split(',')[0]||subject).trim().slice(0,40)}","actions":["Do past exam questions","Identify error patterns","Redo incorrect questions"],"resources":["Past papers"],"milestone":"Score 60 percent on practice"},{"week":3,"title":"Consolidation","focus":"Mixed topics","actions":["Timed practice sessions","Review all mistakes","Focus on weak points"],"resources":["Revision guide"],"milestone":"Score 70 percent on mock"},{"week":4,"title":"Exam Prep","focus":"Final review","actions":["Full timed mock exam","Review mark scheme","Rest and prepare"],"resources":["Exam board past papers"],"milestone":"Feel confident for exam"}],"dailyHabits":["Study for 30 minutes each day","Write out key formulas","Review yesterday work"],"examTips":["Show all working for method marks","Read each question twice","Check answers before submitting"]}`;
+      const simplePrompt = `Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All strings under 80 characters.
+Action plan for ${studentName} studying ${subject}. Current score: ${currentScore}%. Target: ${minTarget}%. Weak areas: ${weakTopics||subject}.
+{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"${w1focus.slice(0,40)}","actions":["Review core concepts for ${w1focus.slice(0,30)}","Redo missed exam questions from scratch","Practice 15 targeted questions with solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score 70 percent on a topic mini-test"},{"week":2,"title":"Practice Week","focus":"${w2focus.slice(0,40)}","actions":["Watch tutorial videos on ${w2focus.slice(0,30)}","Complete one full topic exam section","Write key method steps in own words"],"resources":["${isMath()?'Khan Academy videos on '+w2focus.slice(0,20):'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"No concept errors on ${w2focus.slice(0,20)} practice"},{"week":3,"title":"Consolidation Week","focus":"Mixed weak topics","actions":["Timed mixed-topic drills on all weak areas","Rewrite all error patterns found so far","Complete a full timed practice paper"],"resources":["${isMath()?'Past paper mixed section':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on mixed practice"},{"week":4,"title":"Exam Prep Week","focus":"Final review and timed papers","actions":["Complete two full past papers under exam conditions","Mark with official mark scheme and note all errors","Rest and review one page of key notes each day"],"resources":["${isMath()?'Official exam board past papers':'Past exam papers with mark schemes'}"],"milestone":"Score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["20 minutes of ${subject} practice daily","Write key formulas from memory then check","Review every wrong answer before moving on"],"examTips":["${isMath()?'Show all working for method marks':'Re-read each question carefully before answering'}","Check answers make sense before moving on","${isMath()?'Underline key numbers in word problems':'Plan briefly before writing long answers'}"]}`;
       const raw2 = await planCall(simplePrompt);
-      APP.plan = parseJSON(raw2);
+      let plan2 = parseJSON(raw2);
+      if (!plan2.targetScore || plan2.targetScore <= currentScore) {
+        plan2.targetScore = minTarget;
+      }
+      APP.plan = plan2;
       renderPlan(APP.plan);
     } catch(e2) {
       document.getElementById('plan-content').innerHTML = errCard('Plan generation failed: ' + e2.message);
