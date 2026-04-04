@@ -1,3 +1,4 @@
+Occurrences found: 1
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -480,7 +481,7 @@ async function handlePDF(file) {
     for (let p = 1; p <= pdf.numPages; p++) {
       prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
       const page     = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2.5 });
+      const viewport = page.getViewport({ scale: 2.8 });
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
@@ -831,6 +832,16 @@ function normalizeAnalysis(d) {
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
     const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
+    // Remove questions the OCR explicitly labelled as repetitions
+    d.questions=d.questions.filter(q=>!/^\s*repetition[:\s]/i.test(q.questionText||''));
+    // Deduplicate by normalised questionText (keep first occurrence)
+    const _textSeen=new Set();
+    d.questions=d.questions.filter(q=>{
+      const norm=(q.questionText||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,60);
+      if(norm.length>4&&_textSeen.has(norm))return false;
+      if(norm.length>4)_textSeen.add(norm);
+      return true;
+    });
     const totalAvail=d.questions.reduce((s,q)=>s+q.marksAvailable,0);
     const totalAwarded=d.questions.reduce((s,q)=>s+q.marksAwarded,0);
     if(totalAvail>0){d.totalMarks=totalAvail;d.marksObtained=totalAwarded;}
