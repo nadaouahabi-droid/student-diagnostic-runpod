@@ -8,7 +8,7 @@ echo "=== Checking volume is mounted ==="
 df -h | grep runpod-volume || { echo "ERROR: /runpod-volume not mounted"; exit 1; }
 
 # ── Canonical paths ──────────────────────────────────────────
-export PADDLE_HOME=/runpod-volume/paddle-cache
+export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
 export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
 export PPOCR_HOME=$PADDLEOCR_HOME
 export PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
@@ -31,26 +31,19 @@ apt-get update -qq && apt-get install -y --no-install-recommends \
     curl ca-certificates \
     libglib2.0-0 libgl1
 
-# Upgrade libstdc++ to support Paddle (fix GLIBCXX error)
+# Upgrade libstdc++ to support Paddle 
 echo "=== Upgrading libstdc++ (fix GLIBCXX) ==="
 add-apt-repository -y ppa:ubuntu-toolchain-r/test
 apt-get update -qq && apt-get install -y --no-install-recommends \
     libstdc++6
 
-# ── FIX 1: pin all pip/python calls to python3.10 explicitly ─
-# The RunPod base image defaults to python3.13 for bare `pip`
-# and `python3`. PaddlePaddle has no 3.13 wheel — it tops out
-# at 3.12. We install pip into the 3.10 interpreter and use it
-# for every subsequent install.
+# ── Pin all pip/python calls to python3.10  ─
 echo "=== Bootstrapping pip for Python 3.10 ==="
 curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 PIP="python3.10 -m pip"
 
 # ── Stage 1: PaddlePaddle + PaddleOCR ───────────────────────
 echo "=== Installing PaddleOCR stack ==="
-# FIX 2: paddlepaddle-gpu==2.6.0.post120 does not exist.
-#   Correct package: paddlepaddle-gpu==2.6.1.post120
-#   Correct index:   cuda12.1  (not cudnn8.6-cuda12.0)
 $PIP install --target="$PYPACKAGES" --quiet \
     "numpy==1.24.4" \
     "paddlepaddle-gpu==2.6.1" \
@@ -80,8 +73,8 @@ echo "=== Downloading PaddleOCR models ==="
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 
-# 🔥 FORCE BEFORE ANY IMPORT
-os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache"
+# FORCE BEFORE ANY IMPORT
+os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache/.paddleocr"
 os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
 os.environ["PPOCR_HOME"]     = os.environ["PADDLEOCR_HOME"]
 
@@ -95,7 +88,8 @@ print("Downloading PaddleOCR models into", os.environ["PADDLEOCR_HOME"])
 
 use_gpu = False  # safe for volume population
 
-ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=use_gpu)
+ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=use_gpu, det_model_dir=None, 
+rec_model_dir=None, cls_model_dir=None, show_log=True)
 
 img = Image.new("RGB", (200, 50), color="white")
 img.save("/tmp/test_ocr.png")
@@ -104,15 +98,10 @@ ocr.ocr("/tmp/test_ocr.png")
 print("PaddleOCR models ready.")
 EOF
 
-echo "=== Syncing PaddleOCR cache to volume ==="
-if [ -d "/root/.paddleocr" ]; then
-    rsync -a /root/.paddleocr/ "$PADDLEOCR_HOME"/
-fi
-
 echo "=== Verifying PaddleOCR cache ==="
 if [ -d "$PADDLEOCR_HOME" ] && [ "$(ls -A "$PADDLEOCR_HOME")" ]; then
-    echo "✅ PaddleOCR models present:"
-    ls -lh "$PADDLEOCR_HOME"
+    echo "✅ PaddleOCR models present at $PADDLEOCR_HOME:"
+    find "$PADDLEOCR_HOME" -name "*.pdmodel" -o -name "*.pdiparams" | head -20
 else
     echo "❌ ERROR: PaddleOCR models missing at $PADDLEOCR_HOME"
     exit 1
