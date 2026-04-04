@@ -1504,14 +1504,6 @@ function renderPlan(p) {
     </div>`;
 }
 
-  function preprocessWorksheetJSON(raw) {
-  let s = raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
-  // "…"  whitespace/newline  "…"  where the second " is NOT a key (not followed by :)
-  s = s.replace(/"([ \t]*\n[ \t]*)"(?![ \t]*:)/g, '",\n"');
-  s = s.replace(/"([ \t]{2,})"(?![ \t]*:)/g,      '","');
-  return s;
-}
-  
 // ── WORKSHEET ──
 async function generateWorksheet() {
   goPage('worksheet');
@@ -1555,7 +1547,7 @@ Replace ALL 10 placeholder questions with real exam-style questions targeting ${
       prompt, null, null,
       'You are an expert educational marker. Return valid JSON exactly as instructed.'
     );
-    APP.worksheet = parseJSON(preprocessWorksheetJSON(raw));
+    APP.worksheet = parseJSON(raw);
     renderWorksheet(APP.worksheet);
   } catch(e) {
     document.getElementById('worksheet-content').innerHTML = errCard(e.message);
