@@ -651,8 +651,8 @@ STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this 
 Q<number>: [exact question text as printed/written]
 MARKS AVAILABLE: [marks allocated — look for a number in square brackets at end of question line or right margin e.g. [2], [3 marks], (2). Also check inside answer boxes. Write the numeric value only e.g. 2. If truly absent write 0]
 STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-MARKS AWARDED: [marks the teacher gave — look for ticks (each = 1 mark), crosses, a circled or boxed number in different ink. A circled/boxed number overrides tick count. If teacher wrote 0, record 0 unless crossed out and replaced. If blank write "unmarked". Write a numeric value only e.g. 2 or 0]
-TEACHER NOTE: [corrections or comments in different ink, or "none"]
+MARKS AWARDED: [marks the teacher gave — look specifically for RED INK (the teacher always marks in red): red ticks (each = 1 mark), red crosses, a circled or boxed number written in red ink. A circled/boxed number in red overrides tick count. If teacher wrote 0 in red, record 0 unless crossed out and replaced. If no red mark is present write "unmarked". Write a numeric value only e.g. 2 or 0]
+TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
 CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
 
 PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
@@ -956,7 +956,8 @@ MATHEMATICS-SPECIFIC OCR RULES — follow exactly:
 - Partial marks shown as fractions e.g. 1/2 mark: write as [PARTIAL: 0.5]
 - Method marks (M), Accuracy marks (A), Follow-through marks (ft/FT): note them
 - Working-out lines (even crossed out): transcribe fully — this is critical for diagnosing method errors
-- Box or circle around final answer: note as [FINAL ANSWER: ...]`;
+- Box or circle around final answer: note as [FINAL ANSWER: ...]
+- Teacher marks are always in RED ink — only count red ticks, red crosses, and red circled/boxed numbers as marks awarded`;
 }
 
 function mathAnalysisRules() {
@@ -984,7 +985,7 @@ Mistake classification — identify these specific math error types:
 
 Chain-of-thought instruction: Before producing JSON, silently verify:
   1. Count total marks available across all questions
-  2. Count marks awarded (ticks + partial marks + circled scores)
+  2. Count marks awarded (red ticks + red partial marks + red circled scores)
   3. Calculate percentage = awarded/total * 100
   4. Only then produce the JSON`;
 }
@@ -993,7 +994,7 @@ function mathChainOfThought() {
   if (!isMath()) return '';
   return 'STEP 1 - Before writing JSON, mentally work through:\n'
     + '- List every question and its total marks available\n'
-    + '- List every question and its marks awarded (count ticks, read circled numbers, note partial marks)\n'
+    + '- List every question and its marks awarded (count RED ticks, read RED circled numbers, note RED partial marks)\n'
     + '- Sum both to get totalMarks and marksObtained\n'
     + '- Identify which math topic each question tests\n'
     + '- Identify the specific error type for each wrong or partial answer\n'
@@ -1058,10 +1059,10 @@ Context: ${APP.context || 'none'}${textNote}
 
 STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers. Do not add questions that do not exist. Do not merge sub-questions together.
-2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam (marks in brackets, ticks, crosses, circled numbers). Never estimate or guess marks.
+2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam (marks in brackets, RED ticks, RED crosses, RED circled numbers). Never estimate or guess marks.
 3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. TEACHER MARK RULE: if the teacher has written a mark in a different ink and it shows 0 for a question or sub-question, record marksAwarded as 0 (the student's answer is wrong) — UNLESS the 0 has been visibly crossed out and replaced with a higher value, or there is an explicit additive annotation such as "(+1)" next to it.
+5. TEACHER MARK RULE: if the teacher has written a mark in RED ink and it shows 0 for a question or sub-question, record marksAwarded as 0 (the student's answer is wrong) — UNLESS the 0 has been visibly crossed out and replaced with a higher value, or there is an explicit additive annotation such as "(+1)" next to it.
 
 ${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only. CRITICAL JSON RULES: (1) Never put double-quote characters inside string values — use parentheses instead. (2) Never put raw newlines or tabs inside string values — use a space. (3) All string values must contain ASCII only — no math symbols, use x^2 not ², sqrt() not √. (4) No trailing commas before } or ].
 {"overallScore":0,"totalMarks":0,"marksObtained":0,"grade":"","performanceSummary":"summary here","questions":[{"number":"1","questionText":"brief question text","topic":"Topic Name","marksAvailable":2,"marksAwarded":1},{"number":"1a","questionText":"sub-question a text","topic":"Topic Name","marksAvailable":1,"marksAwarded":0}],"topicPerformance":[{"topic":"Topic Name","score":0,"level":"weak","questionsAttempted":1,"marksAvailable":4,"marksAwarded":1,"mistakes":1}],"keyMistakes":[{"title":"Mistake title","description":"Exactly what the student did wrong, what they should have done, and the likely cause","frequency":"once","topic":"Topic","errorType":"arithmetic slip|sign error|method error|incomplete working|misread question|unit error|conceptual gap"}],"strengths":["strength 1"],"weaknesses":["weakness 1"],"urgentGaps":["gap 1"]}
