@@ -70,32 +70,32 @@ $PIP install --target="$PYPACKAGES" --quiet \
 
 # ── Download PaddleOCR models ────────────────────────────────
 echo "=== Downloading PaddleOCR models ==="
+
+# Force HOME so ~/.paddleocr resolves to our volume path
+export HOME=/runpod-volume/paddle-cache
+export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PPOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
+
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 
-# FORCE BEFORE ANY IMPORT
+os.environ["HOME"]           = "/runpod-volume/paddle-cache"
 os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache/.paddleocr"
 os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
-os.environ["PPOCR_HOME"]     = os.environ["PADDLEOCR_HOME"]
+os.environ["PPOCR_HOME"]     = "/runpod-volume/paddle-cache/.paddleocr"
 
-sys.path.insert(0, os.environ["PYTHONPATH"])
+sys.path.insert(0, "/runpod-volume/pypackages")
 
-import paddle
 from paddleocr import PaddleOCR
 from PIL import Image
+import numpy as np
 
 print("Downloading PaddleOCR models into", os.environ["PADDLEOCR_HOME"])
-
-use_gpu = False  # safe for volume population
-
-ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=use_gpu, det_model_dir=None, 
-rec_model_dir=None, cls_model_dir=None, show_log=True)
-
-img = Image.new("RGB", (200, 50), color="white")
-img.save("/tmp/test_ocr.png")
-ocr.ocr("/tmp/test_ocr.png")
-
-print("PaddleOCR models ready.")
+ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=True)
+arr = np.array(Image.new("RGB", (200, 50), color="white"))
+ocr.ocr(arr, cls=True)
+print("PaddleOCR models ready at", os.environ["PADDLEOCR_HOME"])
 EOF
 
 echo "=== Verifying PaddleOCR cache ==="
