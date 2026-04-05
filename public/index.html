@@ -1112,7 +1112,7 @@ RULES FOR questions array:
 - Sub-sub-questions use format "1a(i)", "1a(ii)" or "1(a)(i)", "1(a)(ii)" — keep parens as-is
 - If question 1 has sub-parts (a), (b), (c), list each as a SEPARATE entry: "1a", "1b", "1c" — do NOT merge them into a single "1" entry
 - If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
-- questionText: a brief (max 12 word) description of what the question asks — taken directly from the exam
+- questionText: a brief (max 18 word) description of what the question asks — taken directly from the exam
 - topic: which curriculum topic this question tests
 - marksAvailable: marks allocated to this question or sub-question
 - marksAwarded: marks the student actually received for this specific question or sub-question
@@ -1521,7 +1521,7 @@ ${mathPlanExtras()}`;
         { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters. The targetScore field must be exactly the number provided in the prompt — do not change it.' },
         { role: 'user', content: p }
       ],
-      options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192 },
+      options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192},
       timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
     }, DEFAULT_TIMEOUT_MIN * 60000 + 30000)).content || '';
   }
