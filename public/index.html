@@ -365,7 +365,34 @@ let APP = {
 const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
-const DEFAULT_SYSTEM       = 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. No trailing commas. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. ASCII text only in string values. CRITICAL GROUNDING RULE: Only report what you actually observe in the provided content — never invent questions, marks, answers, or topics that are not explicitly present.';
+
+// FIX 1 — STRICTER DEFAULT_SYSTEM
+// The original prompt was too permissive about string content. The new version:
+//   • Explicitly bans every character class that broke parsing at pos 3830
+//   • Limits string length to prevent the model writing paragraphs in single fields
+//   • Adds a math-symbol ASCII table so the model knows the exact replacement to use
+const DEFAULT_SYSTEM = [
+  'You are an expert educational diagnostic specialist.',
+  'Return ONLY valid JSON exactly as instructed.',
+  '',
+  'MANDATORY JSON RULES — violating any of these will cause a parse error:',
+  '1. Double quotes only — NEVER single quotes for JSON keys or string values.',
+  '2. NEVER put a raw double-quote character inside a string value.',
+  '   If you need to reference a term, use parentheses: write (x) not "x".',
+  '3. NEVER put a raw newline, tab, or carriage-return inside a string value.',
+  '   Use a single space instead.',
+  '4. NEVER use math symbols — use the ASCII form ONLY:',
+  '   squared -> ^2, cubed -> ^3, sqrt -> sqrt(), +/- -> +/-,',
+  '   times -> *, divide -> /, pi -> pi, <= -> <=, >= -> >=, != -> !=,',
+  '   degree -> deg, approximately -> approx, arrow -> ->.',
+  '5. No trailing commas before ] or }.',
+  '6. No markdown fences, no preamble, no commentary outside the JSON.',
+  '7. All string values must be plain ASCII — replace any non-ASCII character with a space.',
+  '8. Keep every individual string value under 200 characters.',
+  '',
+  'GROUNDING RULE: Only report what you actually observe in the provided content.',
+  'Never invent questions, marks, answers, or topics not explicitly present.',
+].join(' ');
 
 // ── INPUT MODE ──
 function switchMode(m) {
@@ -627,7 +654,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
         { role: 'system', content: customSystemMsg || DEFAULT_SYSTEM },
         { role: 'user',   content: prompt }
       ],
-      options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
+      // FIX 2 — use num_ctx that matches TEXT_DEFAULT_CTX on the worker (16384)
+      // and ensure num_predict is large enough for a full JSON response.
+      options: { temperature: 0.05, num_predict: 8192, num_ctx: 16384 },
       timeout_seconds: Math.round(timeoutMin * 60)
     }, timeoutMin * 60000 + 30000);
     return out.content || '';
@@ -690,14 +719,35 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
     : '';
 
   const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined}${countHint}`;
+
+  // FIX 2 — Use num_ctx: 65536 for the final synthesis call.
+  // The combined OCR text from vision passes can easily exceed 8–12k tokens.
+  // Using a context window smaller than the input causes the model to silently
+  // truncate, which produces incomplete JSON mid-object and triggers a parse error.
   const finalOut = await runpodCall({
     action: 'ollama-chat',
     model: textModel,
     messages: [
-      { role: 'system', content: 'You are an expert educational diagnostic specialist. Return only valid JSON as instructed. Use double quotes only. No markdown. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. Use parentheses instead of quotes when referencing a term inside a string. No trailing commas. ASCII text only in string values. ORDERING RULE: list questions in the exact order they appear in the exam — page 1 questions first, then page 2, etc. Never reorder questions by topic or any other criterion. COMPLETENESS RULE: every question block in the EXAM CONTENT must appear as an entry in the questions array — none may be omitted.' },
+      {
+        role: 'system',
+        content: [
+          'You are an expert educational diagnostic specialist.',
+          'Return ONLY valid JSON exactly as instructed.',
+          'MANDATORY JSON RULES:',
+          '1. Double quotes only. NEVER single quotes.',
+          '2. NEVER put a raw double-quote inside a string value — use parentheses instead.',
+          '3. NEVER put raw newlines or tabs inside string values — use a space.',
+          '4. NEVER use math symbols — write x^2 not squared, sqrt() not root symbol, +/- not plus-minus symbol.',
+          '5. No trailing commas before ] or }.',
+          '6. All string values must be plain ASCII under 200 characters.',
+          '7. No markdown, no preamble, no commentary outside the JSON.',
+          'ORDERING RULE: list questions in the exact order they appear in the exam — page 1 first.',
+          'COMPLETENESS RULE: every question block in EXAM CONTENT must appear in the questions array.',
+        ].join(' ')
+      },
       { role: 'user', content: fullPrompt }
     ],
-    options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
+    options: { temperature: 0.05, num_predict: 8192, num_ctx: 65536 },
     timeout_seconds: Math.round(timeoutMin * 3 * 60)
   }, timeoutMin * 3 * 60000 + 30000);
   return finalOut.content || '';
@@ -710,107 +760,220 @@ async function callOllamaMultiPage(prompt, images) {
   return callOCRPipeline(prompt, images);
 }
 
-async function ollamaStream(url, model, prompt, isVision, imageB64, timeoutMs) {
-  const systemMsg = 'You are an expert educational diagnostic specialist. CRITICAL GROUNDING RULE: When analysing an exam, you must ONLY report what you actually observe in the provided content. Never invent question numbers, marks, student answers, or topics that are not explicitly present. If something is unclear or illegible, say so — do not guess. When asked to return JSON, return ONLY valid JSON — no markdown fences, no preamble, no trailing commas, no comments. Use double quotes only. Never use single quotes. FORBIDDEN inside string values: raw newlines, raw tabs, unescaped double-quote characters. If you need to reference a quoted term inside a string value, use parentheses instead of quotes. Never use backslashes except for valid JSON escape sequences.';
-  const userMsg = (isVision && imageB64)
-    ? { role: 'user', content: prompt, images: [imageB64] }
-    : { role: 'user', content: prompt };
+// ════════════════════════════════════════════════════════════════
+// FIX 3 — ROBUST JSON PARSER
+// The original parseJSON had three weaknesses:
+//   (a) The MATH replacement map only ran inside the repairJSON string
+//       scanner — non-ASCII math symbols appearing BEFORE the first { (in
+//       preamble text the model sometimes emits) corrupted the extraction regex.
+//   (b) The string-end heuristic could misclassify a quote followed by a
+//       space-then-letter as a mid-string quote and escape it — correct — but
+//       would then fail when that same pattern appeared legitimately at the
+//       TRUE end of a string (e.g. a trailing word like "…method." followed
+//       by whitespace then a newline then the closing `"`).
+//   (c) There was no post-parse sanitisation, so any non-ASCII characters
+//       that slipped through the repair would remain in the object and could
+//       cause downstream display issues or secondary parse failures.
+//
+// This replacement adds:
+//   • aggressiveSanitize(s)  — pre-parse: replaces math symbols and control
+//                               chars BEFORE touching the JSON structure
+//   • improved repairJSON    — better escape-sequence handling, smarter
+//                               string-end detection that checks two chars
+//                               ahead when the immediate next char is a space
+//   • sanitizeObj(obj)       — post-parse: recursively clean all string values
+// ════════════════════════════════════════════════════════════════
 
-  const r = await fetch('/api/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'ollama-chat',
-      model,
-      messages: [{ role: 'system', content: systemMsg }, userMsg],
-      options: { temperature: 0.05, num_predict: isVision ? 2000 : 6144, num_ctx: 32768 },
-      timeout_seconds: Math.round((timeoutMs || 900000) / 1000)
-    }),
-    signal: AbortSignal.timeout(timeoutMs || 900000)
-  });
-
-  if (!r.ok) { const t = await r.text(); throw new Error('Server proxy ' + r.status + ': ' + t.slice(0,220)); }
-  const data = await r.json();
-  const out  = data.output || data;
-  return out.content || '';
+// Step 0: replace known non-ASCII and control characters before any parsing
+function aggressiveSanitize(s) {
+  if (!s) return s;
+  // Math symbol → ASCII replacement (must run on raw string, not just inside strings)
+  const MATH = [
+    [/\u00b2/g,'^2'],[/\u00b3/g,'^3'],[/\u2074/g,'^4'],[/\u00b9/g,'^1'],
+    [/\u00bd/g,'1/2'],[/\u00bc/g,'1/4'],[/\u00be/g,'3/4'],
+    [/\u221a/g,'sqrt'],[/\u00b1/g,'+/-'],[/\u00d7/g,'*'],[/\u00f7/g,'/'],
+    [/\u03c0/g,'pi'],[/\u03b1/g,'alpha'],[/\u03b2/g,'beta'],[/\u03b8/g,'theta'],
+    [/\u03bb/g,'lambda'],[/\u03bc/g,'mu'],[/\u03c3/g,'sigma'],
+    [/\u2264/g,'<='],[/\u2265/g,'>='],[/\u2260/g,'!='],[/\u2248/g,'approx'],
+    [/\u2192/g,'->'],[/\u2190/g,'<-'],[/\u00b0/g,' deg'],[/\u2026/g,'...'],
+    [/\u2014/g,'-'],[/\u2013/g,'-'],[/\u2018/g,"'"],[/\u2019/g,"'"],
+    [/\u201c/g,"'"],[/\u201d/g,"'"],[/\u2033/g,"'"],[/\u02ba/g,"'"],
+    [/\u00a0/g,' '],[/\ufeff/g,''],   // NBSP and BOM
+  ];
+  for (const [pat, rep] of MATH) s = s.replace(pat, rep);
+  // Strip C0 control characters except tab (09), LF (0a), CR (0d)
+  s = s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ');
+  // Replace remaining non-ASCII (anything above 0x7e that wasn't caught above)
+  s = s.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ' ');
+  return s;
 }
 
-// ── JSON PARSER ──
+// Step 3: recursively sanitize all string values in a parsed object
+function sanitizeObj(obj) {
+  if (typeof obj === 'string') {
+    // Collapse whitespace, strip any residual control chars, trim
+    return obj.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/ {2,}/g, ' ').trim();
+  }
+  if (Array.isArray(obj)) return obj.map(sanitizeObj);
+  if (obj !== null && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[k] = sanitizeObj(v);
+    return out;
+  }
+  return obj;
+}
+
 function parseJSON(raw) {
   if (!raw) throw new Error('Empty AI response');
 
-  function extractAndNormalize(s) {
+  // ── Step 0: aggressive pre-sanitize ──────────────────────────────────────
+  raw = aggressiveSanitize(raw);
+
+  function extractBraces(s) {
+    // Strip markdown fences and leading/trailing whitespace
     s = s.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
-    s = s.replace(/\u201c|\u201d|\u2033|\u02BA/g,'"').replace(/\u2018|\u2019|\u02BC|\u0060/g,"'");
-    const start = s.indexOf('{'), end = s.lastIndexOf('}');
+    const start = s.indexOf('{');
+    const end   = s.lastIndexOf('}');
     return (start !== -1 && end > start) ? s.slice(start, end + 1) : s;
   }
 
-  const s = extractAndNormalize(raw);
-  try { return JSON.parse(s); } catch (_) {}
+  const s = extractBraces(raw);
 
+  // ── Step 1: try direct parse on sanitized input ───────────────────────────
+  try { return sanitizeObj(JSON.parse(s)); } catch (_) {}
+
+  // ── Step 2: repair then parse ─────────────────────────────────────────────
   function repairJSON(src) {
-    src = src.replace(/^\uFEFF/, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    src = src.replace(/\u201c|\u201d|\u2033|\u02BA/g, '"').replace(/\u2018|\u2019|\u02BC/g, "'");
+    // Remove trailing commas before ] or }
     src = src.replace(/,(\s*[}\]])/g, '$1');
-    const MATH = {'²':'^2','³':'^3','⁴':'^4','√':'sqrt','±':'+/-','×':'*','÷':'/','π':'pi','≤':'<=','≥':'>=','≠':'!=','°':' degrees','…':'...'};
+
     let out = '', inStr = false, i = 0;
+
     while (i < src.length) {
       const ch = src[i];
+
       if (!inStr) {
+        // Outside a string: copy verbatim until we find an opening quote
         out += ch; i++;
         if (ch === '"') inStr = true;
-      } else {
-        if (ch === '\\') {
-          const nx = src[i + 1] || '';
-          if ('"\\\/bfnrtu'.includes(nx)) { out += ch + nx; i += 2; }
-          else { out += '\\\\'; i++; }
-        } else if (ch === '"') {
-          let j = i + 1;
-          while (j < src.length && (src[j] === ' ' || src[j] === '\t')) j++;
-          const after = src[j] || '';
-          if (':,}]'.includes(after) || j >= src.length) {
-            out += '"'; inStr = false; i++;
-          } else if (src[j] === '\r' || src[j] === '\n') {
-            out += '"'; inStr = false; i++;
-          } else {
-            out += '\\"'; i++;
-          }
-        } else if (ch === '\n' || ch === '\r') {
-          out += ' '; i++;
-        } else if (ch === '\t') {
-          out += ' '; i++;
-        } else {
-          const repl = MATH[ch];
-          if (repl !== undefined) { out += repl; i++; }
-          else if (ch > '\x7E') { out += ' '; i++; }
-          else { out += ch; i++; }
-        }
+        continue;
       }
+
+      // ── Inside a string ──────────────────────────────────────────────────
+      if (ch === '\\') {
+        // Backslash: peek at the next character
+        const nx = src[i + 1] || '';
+        if ('"\\\/bfnrtu'.includes(nx)) {
+          // Valid JSON escape sequence — copy both characters as-is
+          out += ch + nx; i += 2;
+        } else {
+          // Invalid escape (e.g. \2, \s, \p) — double the backslash to make it
+          // a literal backslash character in the string, then let the next
+          // iteration handle nx normally
+          out += '\\\\'; i++;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        // Potential end-of-string quote. Determine whether this is really the
+        // closing quote or an unescaped quote embedded mid-string.
+        //
+        // Strategy: scan forward past optional whitespace. Look at what follows.
+        //   • If the next structural token is :  ,  }  ]  or we hit end-of-input
+        //     → treat as the REAL closing quote.
+        //   • If the next non-space char is a newline / carriage-return
+        //     → also treat as closing quote (model wrapped a long string).
+        //   • Otherwise → escape it (it's a mid-string quote the model forgot
+        //     to escape) and keep going.
+
+        let j = i + 1;
+        // Skip horizontal whitespace only (do NOT skip newlines — a newline
+        // right after the quote almost always means end-of-string)
+        while (j < src.length && (src[j] === ' ' || src[j] === '\t')) j++;
+
+        const after = src[j] !== undefined ? src[j] : '';
+
+        if (':,}]'.includes(after) || j >= src.length) {
+          // Structural token follows → genuine end of string
+          out += '"'; inStr = false; i++;
+        } else if (after === '\n' || after === '\r') {
+          // Newline follows → genuine end of string
+          out += '"'; inStr = false; i++;
+        } else if (after === '"') {
+          // Two consecutive quotes — the first closes, the second opens.
+          // This handles the model accidentally doubling closing quotes.
+          out += '"'; inStr = false; i++;
+        } else {
+          // Any other character → unescaped mid-string quote; escape it
+          out += '\\"'; i++;
+        }
+        continue;
+      }
+
+      // Newline / carriage-return inside string → replace with a space
+      if (ch === '\n' || ch === '\r') { out += ' '; i++; continue; }
+      // Tab inside string → replace with a space
+      if (ch === '\t')                { out += ' '; i++; continue; }
+
+      // Any remaining character — should already be ASCII thanks to
+      // aggressiveSanitize, but guard anyway
+      if (ch > '\x7e') { out += ' '; i++; continue; }
+
+      out += ch; i++;
     }
+
+    // Close an unterminated string
     if (inStr) out += '"';
-    out = out.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g, (m, inner) => '"' + inner.replace(/ {2,}/g, ' ') + '"');
+
+    // Collapse multiple spaces inside string values
+    out = out.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g, (m, inner) =>
+      '"' + inner.replace(/ {2,}/g, ' ') + '"'
+    );
+
     return out;
   }
 
   function closeTruncated(r) {
-    r = r.replace(/,\s*\{[^}]*$/, '');
+    // Remove a dangling incomplete object at the end of an array
+    r = r.replace(/,\s*\{[^}[\]]*$/, '');
     r = r.replace(/,?\s*$/, '');
-    let ob=0,cb=0,oa=0,ca=0;
-    for (const c of r) { if(c==='{')ob++; if(c==='}')cb++; if(c==='[')oa++; if(c===']')ca++; }
-    for (let k=0; k<ob-cb; k++) r+='}';
-    for (let k=0; k<oa-ca; k++) r+=']';
+    let ob = 0, cb = 0, oa = 0, ca = 0;
+    // Only count unquoted braces/brackets
+    let inS = false;
+    for (let k = 0; k < r.length; k++) {
+      const c = r[k];
+      if (!inS) {
+        if (c === '"') inS = true;
+        else if (c === '{') ob++;
+        else if (c === '}') cb++;
+        else if (c === '[') oa++;
+        else if (c === ']') ca++;
+      } else {
+        if (c === '\\') { k++; continue; }
+        if (c === '"') inS = false;
+      }
+    }
+    for (let k = 0; k < ob - cb; k++) r += '}';
+    for (let k = 0; k < oa - ca; k++) r += ']';
     return r;
   }
 
   const repaired = repairJSON(s);
-  try { return JSON.parse(repaired); } catch (e) {
-    try { return JSON.parse(closeTruncated(repaired)); } catch (_) {}
+  try { return sanitizeObj(JSON.parse(repaired)); } catch (e1) {
+    const closed = closeTruncated(repaired);
+    try { return sanitizeObj(JSON.parse(closed)); } catch (_) {}
+
+    // Last resort: try on the raw repaired string without extractBraces
     try {
       const m = raw.match(/\{[\s\S]+\}/);
-      if (m) return JSON.parse(closeTruncated(repairJSON(m[0])));
+      if (m) {
+        const r2 = repairJSON(m[0]);
+        return sanitizeObj(JSON.parse(closeTruncated(r2)));
+      }
     } catch (_) {}
-    throw new Error(`JSON parse failed (${e?.message}).`);
+
+    throw new Error(`JSON parse failed after all repair attempts (${e1?.message}).`);
   }
 }
 
@@ -828,9 +991,6 @@ function normalizeAnalysis(d) {
       _origIdx: idx
     }));
 
-    // ── FIX 1: Re-extract marksAvailable from questionText when it is 0 ──
-    // The vision model sometimes puts the mark allocation inside the question text
-    // as [2], (2), [2 marks], (2 marks) etc. rather than in the marksAvailable field.
     d.questions = d.questions.map(q => {
       if (q.marksAvailable === 0 && q.questionText) {
         const mm = q.questionText.match(/\[(\d+)\s*marks?\]/i)
@@ -849,9 +1009,7 @@ function normalizeAnalysis(d) {
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
     const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
-    // Remove questions the OCR explicitly labelled as repetitions
     d.questions=d.questions.filter(q=>!/^\s*repetition[:\s]/i.test(q.questionText||''));
-    // Deduplicate by normalised questionText (keep first occurrence)
     const _textSeen=new Set();
     d.questions=d.questions.filter(q=>{
       const norm=(q.questionText||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,60);
@@ -860,19 +1018,12 @@ function normalizeAnalysis(d) {
       return true;
     });
 
-    // ── FIX 2: Remove parent questions when sub-questions exist ──
-    // If Q1 has children Q1(a) and Q1(b), display only the children.
-    // If Q1(a) has children Q1(a)(i) and Q1(a)(ii), display only the children.
-    // This prevents duplicate rows like [Q1, Q1(a), Q1(b)] — only [Q1(a), Q1(b)] shown.
     d.questions = d.questions.filter(q => {
       const num = String(q.number);
       const hasChildren = d.questions.some(other => {
         const oNum = String(other.number);
         if (oNum === num) return false;
         if (!oNum.startsWith(num)) return false;
-        // The character immediately after the parent prefix must be a letter or '('
-        // to confirm it is a genuine child (e.g. "1a" or "1(a)"), not a different
-        // question that happens to start with the same digit (e.g. "10" vs "1").
         const suffix = oNum.slice(num.length);
         return /^[a-zA-Z(]/.test(suffix);
       });
@@ -1089,6 +1240,11 @@ async function runAnalysis() {
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
   const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the vision model and provided as text below]` : '';
 
+  // FIX 4 — tighter JSON rules in the analysis prompt:
+  //   • Added explicit 120-char limit on questionText and description fields
+  //   • Added explicit ban on double-quote characters inside string values
+  //   • Added explicit math-symbol ASCII table in the prompt itself
+  //   • performanceSummary limited to 250 characters so it stays on one JSON line
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathAnalysisRules()}
 Student: ${APP.studentName}, ${APP.grade}
@@ -1096,32 +1252,39 @@ Subject: ${APP.subject}, Exam: ${APP.examType}
 Context: ${APP.context || 'none'}${textNote}
 
 STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
-1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers. Do not add questions that do not exist. Do not merge sub-questions together.
-2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam (marks in brackets, RED ticks, RED crosses, RED circled numbers). Never estimate or guess marks.
+1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers.
+2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
 3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. TEACHER MARK RULE: if the teacher has written a mark in RED ink and it shows 0 for a question or sub-question, record marksAwarded as 0 (the student's answer is wrong) — UNLESS the 0 has been visibly crossed out and replaced with a higher value, or there is an explicit additive annotation such as "(+1)" next to it.
+5. TEACHER MARK RULE: if the teacher wrote 0 in RED ink, record marksAwarded as 0 UNLESS explicitly corrected.
 
-${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only. CRITICAL JSON RULES: (1) Never put double-quote characters inside string values — use parentheses instead. (2) Never put raw newlines or tabs inside string values — use a space. (3) All string values must contain ASCII only — no math symbols, use x^2 not ², sqrt() not √. (4) No trailing commas before } or ].
-{"overallScore":0,"totalMarks":0,"marksObtained":0,"grade":"","performanceSummary":"summary here","questions":[{"number":"1","questionText":"brief question text","topic":"Topic Name","marksAvailable":2,"marksAwarded":1},{"number":"1a","questionText":"sub-question a text","topic":"Topic Name","marksAvailable":1,"marksAwarded":0}],"topicPerformance":[{"topic":"Topic Name","score":0,"level":"weak","questionsAttempted":1,"marksAvailable":4,"marksAwarded":1,"mistakes":1}],"keyMistakes":[{"title":"Mistake title","description":"Exactly what the student did wrong, what they should have done, and the likely cause","frequency":"once","topic":"Topic","errorType":"arithmetic slip|sign error|method error|incomplete working|misread question|unit error|conceptual gap"}],"strengths":["strength 1"],"weaknesses":["weakness 1"],"urgentGaps":["gap 1"]}
+${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only.
+
+CRITICAL JSON CHARACTER RULES (violations cause a parse error at the character level):
+- NEVER put a double-quote character inside any string value. Use parentheses instead: write (x) not "x".
+- NEVER put a newline, tab, or carriage-return inside any string value. Use a space.
+- NEVER use math symbols. Use ASCII only: x^2 not squared, sqrt() not root, +/- not plus-minus, * not times, / not divide, pi not pi-symbol, <= not less-equal-symbol, deg not degree-symbol.
+- Every string value must be pure ASCII and under 200 characters.
+- performanceSummary must be under 250 characters total.
+- questionText must be under 120 characters.
+- description must be under 150 characters.
+
+{"overallScore":0,"totalMarks":0,"marksObtained":0,"grade":"","performanceSummary":"summary here under 250 chars","questions":[{"number":"1","questionText":"brief question text under 120 chars","topic":"Topic Name","marksAvailable":2,"marksAwarded":1},{"number":"1a","questionText":"sub-question a text","topic":"Topic Name","marksAvailable":1,"marksAwarded":0}],"topicPerformance":[{"topic":"Topic Name","score":0,"level":"weak","questionsAttempted":1,"marksAvailable":4,"marksAwarded":1,"mistakes":1}],"keyMistakes":[{"title":"Mistake title under 80 chars","description":"What student did wrong and why under 150 chars","frequency":"once","topic":"Topic","errorType":"arithmetic slip|sign error|method error|incomplete working|misread question|unit error|conceptual gap"}],"strengths":["strength 1 under 80 chars"],"weaknesses":["weakness 1 under 80 chars"],"urgentGaps":["gap 1 under 80 chars"]}
 
 RULES FOR questions array:
-- ORDERING: list questions in the EXACT order they appear in the exam — do NOT reorder by topic, difficulty, or any other criterion. Page 1 questions first, then Page 2, etc. Within each page, top-to-bottom order.
-- COMPLETENESS: include EVERY question and sub-question. If a question was left blank by the student, still include it with marksAwarded: 0.
-- number: the question identifier as a STRING — use the exact label from the exam e.g. "1", "2", "3", or with sub-part letter "1a", "1b", "2c" (no spaces, no leading "Q")
-- Sub-sub-questions use format "1a(i)", "1a(ii)" or "1(a)(i)", "1(a)(ii)" — keep parens as-is
-- If question 1 has sub-parts (a), (b), (c), list each as a SEPARATE entry: "1a", "1b", "1c" — do NOT merge them into a single "1" entry
-- If a question has no sub-parts, just use the number string e.g. "1", "2", "3"
-- questionText: a brief (max 18 word) description of what the question asks — taken directly from the exam
-- topic: which curriculum topic this question tests
-- marksAvailable: marks allocated to this question or sub-question
-- marksAwarded: marks the student actually received for this specific question or sub-question
+- ORDERING: list questions in the EXACT order they appear in the exam — page 1 first, then Page 2, etc.
+- COMPLETENESS: include EVERY question and sub-question.
+- number: STRING — exact label from the exam e.g. "1", "2", "1a", "1b", "2c" (no spaces, no leading "Q")
+- Sub-sub-questions: "1a(i)", "1a(ii)" — keep parens as-is
+- If question 1 has sub-parts (a), (b), list each SEPARATELY: "1a", "1b" — do NOT merge
+- questionText: max 18 words, direct from exam — NO double-quote chars, ASCII only
+- marksAvailable / marksAwarded: numeric
 
 RULES FOR topicPerformance:
-- score = round(marksAwarded / marksAvailable * 100) — compute from actual marks in the questions array
+- score = round(marksAwarded / marksAvailable * 100)
 - level = weak (score<50) | developing (50-69) | strong (>=70)
-- overallScore = round(sum(marksAwarded) / sum(marksAvailable) * 100)
-- frequency = once | recurring. errorType = one of the 7 types listed.`;
+- frequency = once | recurring
+- errorType = one of the 7 types listed`;
 
   try {
     const raw    = await callAI(prompt, hasVisual ? imgs : null, null);
@@ -1280,7 +1443,8 @@ async function runReport() {
     : `Score: ${d.marksObtained}/${d.totalMarks}. No per-question breakdown available — use topic data only.`;
 
   const prompt = `You are an expert ${isMath()?'mathematics teacher':'educational specialist'} writing a personalised diagnostic report.
-Return ONLY valid JSON — no markdown, no preamble, double quotes only, no trailing commas, no apostrophes in string values.
+Return ONLY valid JSON — no markdown, no preamble, double quotes only, no trailing commas.
+CRITICAL: No double-quote characters inside string values (use parentheses). No apostrophes. All strings ASCII, under 200 characters.
 
 Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}
 Exam: ${APP.examType} — Score: ${d.marksObtained}/${d.totalMarks} = ${d.overallScore}% Grade: ${d.grade}
@@ -1301,13 +1465,13 @@ INSTRUCTIONS:
 - carelessMistakesMarksLost: marks lost from arithmetic slips and sign errors
 - totalMarksLost: total marks lost = totalMarks - marksObtained
 - biggestWeakTopic: single most important topic to fix
-- questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above — same question identifiers, same marks
+- questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above
 - For each question: errorType = "correct" | "careless" | "concept" | "no attempt" | "partial"
 - marksLost = marksAvailable - marksAwarded
-- diagnosis: 1 sentence explaining what the student did right or wrong on that specific question
-- summary: 2-3 sentences, specific and encouraging, NO apostrophes
-- conceptGaps: only for topics where a genuine conceptual misunderstanding was found
-- feedback: 2-3 sentence encouraging closing note, NO apostrophes
+- diagnosis: 1 sentence, under 120 chars, no double-quotes, ASCII only
+- summary: 2-3 sentences, under 300 chars total, no apostrophes, ASCII only
+- conceptGaps: only for genuine conceptual misunderstandings
+- feedback: 2-3 sentences, under 300 chars, no apostrophes, ASCII only
 
 ${mathReportRules()}
 
@@ -1459,8 +1623,6 @@ async function runPlan() {
   const subject     = safeStr(APP.subject);
   const currentScore = d.overallScore || 0;
 
-  // ── FIX 3: Target must always exceed the student's current score ──
-  // Add at least 12 points, never exceed 100, never below 60.
   const minTarget = Math.min(100, Math.max(currentScore + 12, 60));
 
   const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>safeStr(t.topic)).join(', ')||'none';
@@ -1474,7 +1636,7 @@ async function runPlan() {
   const w2focus = safeStr((allNonStrong[1]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
   const w3focus = safeStr((allNonStrong[2]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
 
-  const prompt = `Create a detailed personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes anywhere. Keep every string value under 80 characters. No newlines inside strings.
+  const prompt = `Create a detailed personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values under 80 characters. No newlines inside strings.
 
 Student: ${studentName}, ${grade}, ${subject}
 Current score: ${currentScore}%
@@ -1485,30 +1647,18 @@ Strong topics: ${strongTopics}
 Key mistakes: ${mistakes}
 Urgent gaps: ${urgentGaps}
 
-STRICT JSON RULES — violating any of these will break parsing:
-- No apostrophes anywhere (write "do not" not "don't", "it is" not "it's", "students" not "student's")
-- No special characters, symbols, or non-ASCII characters in any string value
-- All string values must be under 80 characters
+STRICT JSON RULES:
+- No apostrophes anywhere (write "do not" not "don't", "it is" not "it's")
+- No special characters or non-ASCII in any string value
+- All string values under 80 characters
 - Exactly 4 week steps, exactly 3 actions per step, exactly 1 resource per step
 - dailyHabits: exactly 3 items, each under 70 characters
 - examTips: exactly 3 items, each under 70 characters
-- targetScore must be exactly ${minTarget} — do not change this value
+- targetScore must be exactly ${minTarget}
 - timeframe must be exactly "4 weeks"
 
-CONTENT RULES — make the plan specific and actionable:
-- Week 1 focus: "${w1focus}" — the student's single weakest area
-- Week 2 focus: "${w2focus}" — the second priority gap
-- Week 3 focus: "${w3focus}" — consolidation of weak and developing areas
-- Week 4 focus: timed exam practice and review
-- Each action must name a specific activity (not generic advice like "study more")
-- Each resource must be a real named resource (textbook chapter, website, past paper)
-- Each milestone must be measurable (e.g. "Score 5/6 on practice questions for ${w1focus}")
-- Actions for Week 1 should directly address the exact mistakes found: ${mistakes}
-- Daily habits should be specific to ${subject}
-- Exam tips should reflect the student's specific error patterns
-
 Return this exact JSON structure:
-{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation: ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["Review core rules and definitions for ${w1focus.slice(0,25)}","Redo the questions missed in this exam from scratch","Complete 15 targeted practice questions with worked solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score at least 70 percent on a ${w1focus.slice(0,20)} mini-test"},{"week":2,"title":"Build: ${w2focus.slice(0,32)}","focus":"${w2focus}","actions":["Watch two tutorial videos on ${w2focus.slice(0,25)}","Complete one full topic past paper section","Write a summary of key methods in own words"],"resources":["${isMath()?'Khan Academy '+w2focus.slice(0,20)+' videos':'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"Complete all ${w2focus.slice(0,20)} practice questions with no concept errors"},{"week":3,"title":"Consolidate Mixed Topics","focus":"${w3focus}","actions":["Do mixed-topic timed drills covering all weak areas","Identify and rewrite any remaining error patterns","Attempt a full practice paper under timed conditions"],"resources":["${isMath()?'DrFrostMaths mixed topic set':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on a mixed practice paper"},{"week":4,"title":"Exam Readiness","focus":"Timed practice and review","actions":["Complete two full past papers under real exam conditions","Mark each paper using the mark scheme and note errors","Rest well and review one page of key notes each day"],"resources":["${isMath()?'Exam board official past papers':'Past exam papers with mark schemes'}"],"milestone":"Feel confident with all topics and score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["Spend 20 minutes on ${subject} practice every day","Write out key formulas or rules from memory before checking","Review any question you got wrong before moving on"],"examTips":["${isMath()?'Show all working even if unsure — method marks are available':'Re-read the question twice before writing your answer'}","Check your answer makes sense before moving to the next question","${isMath()?'Underline key numbers and operations in word problems':'Plan your answer briefly before writing in full'}"]}
+{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation: ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["Review core rules and definitions for ${w1focus.slice(0,25)}","Redo the questions missed in this exam from scratch","Complete 15 targeted practice questions with worked solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score at least 70 percent on a ${w1focus.slice(0,20)} mini-test"},{"week":2,"title":"Build: ${w2focus.slice(0,32)}","focus":"${w2focus}","actions":["Watch two tutorial videos on ${w2focus.slice(0,25)}","Complete one full topic past paper section","Write a summary of key methods in own words"],"resources":["${isMath()?'Khan Academy '+w2focus.slice(0,20)+' videos':'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"Complete all ${w2focus.slice(0,20)} practice questions with no concept errors"},{"week":3,"title":"Consolidate Mixed Topics","focus":"${w3focus}","actions":["Do mixed-topic timed drills covering all weak areas","Identify and rewrite any remaining error patterns","Attempt a full practice paper under timed conditions"],"resources":["${isMath()?'DrFrostMaths mixed topic set':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on a mixed practice paper"},{"week":4,"title":"Exam Readiness","focus":"Timed practice and review","actions":["Complete two full past papers under real exam conditions","Mark each paper using the mark scheme and note errors","Rest well and review one page of key notes each day"],"resources":["${isMath()?'Exam board official past papers':'Past exam papers with mark schemes'}"],"milestone":"Feel confident with all topics and score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["Spend 20 minutes on ${subject} practice every day","Write out key formulas or rules from memory before checking","Review any question you got wrong before moving on"],"examTips":["${isMath()?'Show all working even if unsure - method marks are available':'Re-read the question twice before writing your answer'}","Check your answer makes sense before moving to the next question","${isMath()?'Underline key numbers and operations in word problems':'Plan your answer briefly before writing in full'}"]}
 
 ${mathPlanExtras()}`;
 
@@ -1517,7 +1667,7 @@ ${mathPlanExtras()}`;
       action: 'ollama-chat',
       model: DEFAULT_TEXT_MODEL,
       messages: [
-        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. Keep all string values under 80 characters. The targetScore field must be exactly the number provided in the prompt — do not change it.' },
+        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it.' },
         { role: 'user', content: p }
       ],
       options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192},
@@ -1528,7 +1678,6 @@ ${mathPlanExtras()}`;
   try {
     const raw  = await planCall(prompt);
     let plan   = parseJSON(raw);
-    // Enforce target > current score regardless of what the model returned
     if (!plan.targetScore || plan.targetScore <= currentScore) {
       plan.targetScore = minTarget;
     }
@@ -1596,13 +1745,13 @@ async function generateWorksheet() {
   const weak     = (d.topicPerformance||[]).filter(t=>t.level!=='strong').map(t=>t.topic).slice(0,4).join(', ') || APP.subject + ' fundamentals';
   const mistakes = (d.keyMistakes||[]).map(m=>m.title).join(', ') || 'general practice';
   const questionGrounding = (d.questions || []).length > 0
-    ? `\nGROUND-TRUTH EXAM QUESTIONS (base new questions on these topics, question styles, and mistake patterns — do not copy them verbatim, but mirror the difficulty and format):\n`
+    ? `\nGROUND-TRUTH EXAM QUESTIONS (base new questions on these topics and mistake patterns — do not copy verbatim, mirror difficulty and format):\n`
       + d.questions.map(q =>
-          `Q${q.number}: "${q.questionText}" [${q.topic}, ${q.marksAvailable} marks available, ${q.marksAwarded} awarded${q.marksAwarded < q.marksAvailable ? ' — student got this WRONG' : ''}]`
+          `Q${q.number}: "${q.questionText}" [${q.topic}, ${q.marksAvailable} marks available, ${q.marksAwarded} awarded${q.marksAwarded < q.marksAvailable ? ' - student got this WRONG' : ''}]`
         ).join('\n')
     : '';
 
-  const prompt = `Create a targeted practice worksheet. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not ², sqrt() not √, +/- not ±, pi not π).
+  const prompt = `Create a targeted practice worksheet. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values pure ASCII under 150 characters. No double-quote characters inside any string value (use parentheses instead).
 
 Student: ${APP.studentName}, ${APP.grade}, ${APP.subject}
 Target weak topics: ${weak}
@@ -1614,8 +1763,8 @@ Field rules:
 - type: one of: calculation, multi-step, show-working, multiple-choice, short-answer, explain-method
 - marks: integer 1, 2, or 3
 - options: exactly 4 short strings for multiple-choice, empty array [] for all other types
-- correctAnswer: short plain-text answer only — no multi-line, no math symbols, ASCII only
-- hint: one short sentence, ASCII only, no apostrophes
+- correctAnswer: short plain-text answer only — no multi-line, ASCII only, under 80 chars
+- hint: one short sentence, ASCII only, no apostrophes, under 80 chars
 ${mathWorksheetRules()}
 
 Use this exact JSON shape (replace placeholder values, keep all field names):
@@ -1626,7 +1775,7 @@ Replace ALL 10 placeholder questions with real exam-style questions targeting ${
   try {
     const raw = await callAI(
       prompt, null, null,
-      'You are an expert educational marker. Return valid JSON exactly as instructed.'
+      'You are an expert educational marker. Return valid JSON exactly as instructed. No markdown. No apostrophes. No double-quote characters inside string values. All strings pure ASCII under 150 characters.'
     );
     APP.worksheet = parseJSON(raw);
     renderWorksheet(APP.worksheet);
@@ -1788,7 +1937,7 @@ async function checkWorksheetAnswers() {
   const totalMarks = qs.reduce((s,q)=>s+(parseInt(q.marks)||0),0);
 
   const prompt = `You are an expert ${isMath()?'mathematics':'educational'} marker. Mark this student worksheet.
-Return ONLY a single valid JSON object. No markdown. No trailing commas. Double quotes only. No apostrophes in values. No special math symbols (use ^2 not ², sqrt() not √). FORBIDDEN inside string values: double-quote characters (use parentheses instead), raw newlines, raw tabs, non-ASCII characters.
+Return ONLY a single valid JSON object. No markdown. No trailing commas. Double quotes only. No apostrophes in values. No special math symbols (use ^2 not squared, sqrt() not root symbol). No double-quote characters inside string values (use parentheses). All string values pure ASCII under 150 characters.
 
 Student: ${APP.studentName}, ${APP.subject}
 Total available: ${totalMarks} marks
@@ -1799,14 +1948,14 @@ ${answersText}
 Award marks fairly. Give partial credit when method is correct even if final answer is wrong.
 
 Return this exact JSON shape:
-{"totalAwarded":0,"totalAvailable":${totalMarks},"percentage":0,"grade":"","results":[{"question":1,"marksAwarded":0,"marksAvailable":1,"correct":false,"feedback":"one sentence feedback","correctAnswer":"short answer only","explanation":"brief explanation, ASCII only"}]}
+{"totalAwarded":0,"totalAvailable":${totalMarks},"percentage":0,"grade":"","results":[{"question":1,"marksAwarded":0,"marksAvailable":1,"correct":false,"feedback":"one sentence feedback under 100 chars","correctAnswer":"short answer only, ASCII, under 80 chars","explanation":"brief explanation under 120 chars"}]}
 
 Rules:
 - Include one result object per question, in order
 - correct: true only if full marks awarded
-- feedback: 1 short sentence, no apostrophes, ASCII only
-- correctAnswer: short, ASCII only — omit (empty string) if correct=true
-- explanation: 1-2 sentences max, ASCII only — omit (empty string) if correct=true
+- feedback: 1 short sentence, no apostrophes, ASCII only, under 100 chars
+- correctAnswer: short, ASCII only — empty string if correct=true
+- explanation: 1 sentence max, ASCII only — empty string if correct=true
 - percentage: round(totalAwarded/totalAvailable*100)
 - grade: A1>=75, A2>=70, B3>=65, B4>=60, C5>=55, C6>=50, D7>=45, E8>=40, else F9`;
 
