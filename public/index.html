@@ -366,11 +366,6 @@ const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q8_0';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
 
-// FIX 1 — STRICTER DEFAULT_SYSTEM
-// The original prompt was too permissive about string content. The new version:
-//   • Explicitly bans every character class that broke parsing at pos 3830
-//   • Limits string length to prevent the model writing paragraphs in single fields
-//   • Adds a math-symbol ASCII table so the model knows the exact replacement to use
 const DEFAULT_SYSTEM = [
   'You are an expert educational diagnostic specialist.',
   'Return ONLY valid JSON exactly as instructed.',
@@ -654,8 +649,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
         { role: 'system', content: customSystemMsg || DEFAULT_SYSTEM },
         { role: 'user',   content: prompt }
       ],
-      // FIX 2 — use num_ctx that matches TEXT_DEFAULT_CTX on the worker (16384)
-      // and ensure num_predict is large enough for a full JSON response.
       options: { temperature: 0.05, num_predict: 8192, num_ctx: 16384 },
       timeout_seconds: Math.round(timeoutMin * 60)
     }, timeoutMin * 60000 + 30000);
@@ -720,10 +713,6 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
 
   const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined}${countHint}`;
 
-  // FIX 2 — Use num_ctx: 65536 for the final synthesis call.
-  // The combined OCR text from vision passes can easily exceed 8–12k tokens.
-  // Using a context window smaller than the input causes the model to silently
-  // truncate, which produces incomplete JSON mid-object and triggers a parse error.
   const finalOut = await runpodCall({
     action: 'ollama-chat',
     model: textModel,
@@ -760,34 +749,9 @@ async function callOllamaMultiPage(prompt, images) {
   return callOCRPipeline(prompt, images);
 }
 
-// ════════════════════════════════════════════════════════════════
-// FIX 3 — ROBUST JSON PARSER
-// The original parseJSON had three weaknesses:
-//   (a) The MATH replacement map only ran inside the repairJSON string
-//       scanner — non-ASCII math symbols appearing BEFORE the first { (in
-//       preamble text the model sometimes emits) corrupted the extraction regex.
-//   (b) The string-end heuristic could misclassify a quote followed by a
-//       space-then-letter as a mid-string quote and escape it — correct — but
-//       would then fail when that same pattern appeared legitimately at the
-//       TRUE end of a string (e.g. a trailing word like "…method." followed
-//       by whitespace then a newline then the closing `"`).
-//   (c) There was no post-parse sanitisation, so any non-ASCII characters
-//       that slipped through the repair would remain in the object and could
-//       cause downstream display issues or secondary parse failures.
-//
-// This replacement adds:
-//   • aggressiveSanitize(s)  — pre-parse: replaces math symbols and control
-//                               chars BEFORE touching the JSON structure
-//   • improved repairJSON    — better escape-sequence handling, smarter
-//                               string-end detection that checks two chars
-//                               ahead when the immediate next char is a space
-//   • sanitizeObj(obj)       — post-parse: recursively clean all string values
-// ════════════════════════════════════════════════════════════════
-
-// Step 0: replace known non-ASCII and control characters before any parsing
+// ── JSON PARSER ──
 function aggressiveSanitize(s) {
   if (!s) return s;
-  // Math symbol → ASCII replacement (must run on raw string, not just inside strings)
   const MATH = [
     [/\u00b2/g,'^2'],[/\u00b3/g,'^3'],[/\u2074/g,'^4'],[/\u00b9/g,'^1'],
     [/\u00bd/g,'1/2'],[/\u00bc/g,'1/4'],[/\u00be/g,'3/4'],
@@ -798,20 +762,16 @@ function aggressiveSanitize(s) {
     [/\u2192/g,'->'],[/\u2190/g,'<-'],[/\u00b0/g,' deg'],[/\u2026/g,'...'],
     [/\u2014/g,'-'],[/\u2013/g,'-'],[/\u2018/g,"'"],[/\u2019/g,"'"],
     [/\u201c/g,"'"],[/\u201d/g,"'"],[/\u2033/g,"'"],[/\u02ba/g,"'"],
-    [/\u00a0/g,' '],[/\ufeff/g,''],   // NBSP and BOM
+    [/\u00a0/g,' '],[/\ufeff/g,''],
   ];
   for (const [pat, rep] of MATH) s = s.replace(pat, rep);
-  // Strip C0 control characters except tab (09), LF (0a), CR (0d)
   s = s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ');
-  // Replace remaining non-ASCII (anything above 0x7e that wasn't caught above)
   s = s.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ' ');
   return s;
 }
 
-// Step 3: recursively sanitize all string values in a parsed object
 function sanitizeObj(obj) {
   if (typeof obj === 'string') {
-    // Collapse whitespace, strip any residual control chars, trim
     return obj.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/ {2,}/g, ' ').trim();
   }
   if (Array.isArray(obj)) return obj.map(sanitizeObj);
@@ -826,11 +786,9 @@ function sanitizeObj(obj) {
 function parseJSON(raw) {
   if (!raw) throw new Error('Empty AI response');
 
-  // ── Step 0: aggressive pre-sanitize ──────────────────────────────────────
   raw = aggressiveSanitize(raw);
 
   function extractBraces(s) {
-    // Strip markdown fences and leading/trailing whitespace
     s = s.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
     const start = s.indexOf('{');
     const end   = s.lastIndexOf('}');
@@ -839,12 +797,9 @@ function parseJSON(raw) {
 
   const s = extractBraces(raw);
 
-  // ── Step 1: try direct parse on sanitized input ───────────────────────────
   try { return sanitizeObj(JSON.parse(s)); } catch (_) {}
 
-  // ── Step 2: repair then parse ─────────────────────────────────────────────
   function repairJSON(src) {
-    // Remove trailing commas before ] or }
     src = src.replace(/,(\s*[}\]])/g, '$1');
 
     let out = '', inStr = false, i = 0;
@@ -853,80 +808,49 @@ function parseJSON(raw) {
       const ch = src[i];
 
       if (!inStr) {
-        // Outside a string: copy verbatim until we find an opening quote
         out += ch; i++;
         if (ch === '"') inStr = true;
         continue;
       }
 
-      // ── Inside a string ──────────────────────────────────────────────────
       if (ch === '\\') {
-        // Backslash: peek at the next character
         const nx = src[i + 1] || '';
         if ('"\\\/bfnrtu'.includes(nx)) {
-          // Valid JSON escape sequence — copy both characters as-is
           out += ch + nx; i += 2;
         } else {
-          // Invalid escape (e.g. \2, \s, \p) — double the backslash to make it
-          // a literal backslash character in the string, then let the next
-          // iteration handle nx normally
           out += '\\\\'; i++;
         }
         continue;
       }
 
       if (ch === '"') {
-        // Potential end-of-string quote. Determine whether this is really the
-        // closing quote or an unescaped quote embedded mid-string.
-        //
-        // Strategy: scan forward past optional whitespace. Look at what follows.
-        //   • If the next structural token is :  ,  }  ]  or we hit end-of-input
-        //     → treat as the REAL closing quote.
-        //   • If the next non-space char is a newline / carriage-return
-        //     → also treat as closing quote (model wrapped a long string).
-        //   • Otherwise → escape it (it's a mid-string quote the model forgot
-        //     to escape) and keep going.
-
         let j = i + 1;
-        // Skip horizontal whitespace only (do NOT skip newlines — a newline
-        // right after the quote almost always means end-of-string)
         while (j < src.length && (src[j] === ' ' || src[j] === '\t')) j++;
 
         const after = src[j] !== undefined ? src[j] : '';
 
         if (':,}]'.includes(after) || j >= src.length) {
-          // Structural token follows → genuine end of string
           out += '"'; inStr = false; i++;
         } else if (after === '\n' || after === '\r') {
-          // Newline follows → genuine end of string
           out += '"'; inStr = false; i++;
         } else if (after === '"') {
-          // Two consecutive quotes — the first closes, the second opens.
-          // This handles the model accidentally doubling closing quotes.
           out += '"'; inStr = false; i++;
         } else {
-          // Any other character → unescaped mid-string quote; escape it
           out += '\\"'; i++;
         }
         continue;
       }
 
-      // Newline / carriage-return inside string → replace with a space
       if (ch === '\n' || ch === '\r') { out += ' '; i++; continue; }
-      // Tab inside string → replace with a space
       if (ch === '\t')                { out += ' '; i++; continue; }
 
-      // Any remaining character — should already be ASCII thanks to
-      // aggressiveSanitize, but guard anyway
       if (ch > '\x7e') { out += ' '; i++; continue; }
 
       out += ch; i++;
     }
 
-    // Close an unterminated string
     if (inStr) out += '"';
 
-    // Collapse multiple spaces inside string values
     out = out.replace(/"((?:[^"\\]|\\[\s\S])*?)"/g, (m, inner) =>
       '"' + inner.replace(/ {2,}/g, ' ') + '"'
     );
@@ -935,11 +859,9 @@ function parseJSON(raw) {
   }
 
   function closeTruncated(r) {
-    // Remove a dangling incomplete object at the end of an array
     r = r.replace(/,\s*\{[^}[\]]*$/, '');
     r = r.replace(/,?\s*$/, '');
     let ob = 0, cb = 0, oa = 0, ca = 0;
-    // Only count unquoted braces/brackets
     let inS = false;
     for (let k = 0; k < r.length; k++) {
       const c = r[k];
@@ -964,7 +886,6 @@ function parseJSON(raw) {
     const closed = closeTruncated(repaired);
     try { return sanitizeObj(JSON.parse(closed)); } catch (_) {}
 
-    // Last resort: try on the raw repaired string without extractBraces
     try {
       const m = raw.match(/\{[\s\S]+\}/);
       if (m) {
@@ -1240,11 +1161,6 @@ async function runAnalysis() {
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
   const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the vision model and provided as text below]` : '';
 
-  // FIX 4 — tighter JSON rules in the analysis prompt:
-  //   • Added explicit 120-char limit on questionText and description fields
-  //   • Added explicit ban on double-quote characters inside string values
-  //   • Added explicit math-symbol ASCII table in the prompt itself
-  //   • performanceSummary limited to 250 characters so it stays on one JSON line
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathAnalysisRules()}
 Student: ${APP.studentName}, ${APP.grade}
@@ -1522,6 +1438,30 @@ function renderReport(r) {
     qbSource=qbSource.filter(q=>{const k=String(q.question||'').replace(/^Q/i,'').trim().toLowerCase().replace(/[\s()]/g,'');if(_rSeen.has(k))return false;_rSeen.add(k);return true;});
   }
 
+  // ── Compute diagnosis values from ground-truth analysis data ─────────────
+  // Override AI-generated values which are often hallucinated.
+  // totalMarksLost comes directly from the normalised analysis marks.
+  // conceptErrorMarksLost / carelessMistakesMarksLost are derived from the
+  // per-question errorType classification that was already done by the AI in
+  // the report step and then cross-checked against qbSource here.
+  const computedTotalLost = (d.totalMarks || 0) - (d.marksObtained || 0);
+  const computedConceptLost = qbSource
+    .filter(q => q.errorType === 'concept' || q.errorType === 'no attempt')
+    .reduce((s, q) => s + (parseInt(q.marksLost) || 0), 0);
+  const computedCarelessLost = qbSource
+    .filter(q => q.errorType === 'careless')
+    .reduce((s, q) => s + (parseInt(q.marksLost) || 0), 0);
+  // Biggest weak topic: lowest-scoring non-strong topic from actual analysis
+  const computedBiggestWeak = (d.topicPerformance || [])
+    .filter(t => t.level !== 'strong')
+    .sort((a, b) => a.score - b.score)[0]?.topic || dg.biggestWeakTopic || '–';
+  const diagDisplay = {
+    conceptErrorMarksLost: computedConceptLost,
+    carelessMistakesMarksLost: computedCarelessLost,
+    totalMarksLost: computedTotalLost,
+    biggestWeakTopic: computedBiggestWeak
+  };
+
   const qbRows = qbSource.map(q => {
     const et=q.errorType||'correct';
     const badge=et==='correct'
@@ -1568,10 +1508,10 @@ function renderReport(r) {
       </div>
       <div class="diag-block">
         <div class="report-section-title" style="color:rgba(255,255,255,0.55);margin-bottom:.75rem">Diagnosis</div>
-        <div class="diag-row"><span class="diag-label">Concept Error Marks Lost</span><span class="diag-value red">${dg.conceptErrorMarksLost||0}</span></div>
-        <div class="diag-row"><span class="diag-label">Careless Mistakes Marks Lost</span><span class="diag-value amber">${dg.carelessMistakesMarksLost||0}</span></div>
-        <div class="diag-row"><span class="diag-label">Total Marks Lost</span><span class="diag-value red">${dg.totalMarksLost||0}</span></div>
-        <div class="diag-row"><span class="diag-label">Biggest Weak Topic</span><span class="diag-value teal" style="font-size:12px;max-width:55%;text-align:right">${dg.biggestWeakTopic||'–'}</span></div>
+        <div class="diag-row"><span class="diag-label">Concept Error Marks Lost</span><span class="diag-value red">${diagDisplay.conceptErrorMarksLost}</span></div>
+        <div class="diag-row"><span class="diag-label">Careless Mistakes Marks Lost</span><span class="diag-value amber">${diagDisplay.carelessMistakesMarksLost}</span></div>
+        <div class="diag-row"><span class="diag-label">Total Marks Lost</span><span class="diag-value red">${diagDisplay.totalMarksLost}</span></div>
+        <div class="diag-row"><span class="diag-label">Biggest Weak Topic</span><span class="diag-value teal" style="font-size:12px;max-width:55%;text-align:right">${diagDisplay.biggestWeakTopic}</span></div>
       </div>
     </div>
 
@@ -1622,44 +1562,73 @@ async function runPlan() {
   const grade       = safeStr(APP.grade);
   const subject     = safeStr(APP.subject);
   const currentScore = d.overallScore || 0;
-
   const minTarget = Math.min(100, Math.max(currentScore + 12, 60));
+
+  // ── Build rich wrong-question context so the model writes specific actions ──
+  const wrongQuestions = (d.questions || [])
+    .filter(q => q.marksAwarded < q.marksAvailable)
+    .map(q => `Q${q.number} [${safeStr(q.topic)}]: ${safeStr(q.questionText)} — got ${q.marksAwarded}/${q.marksAvailable} marks`)
+    .slice(0, 10)
+    .join('\n') || 'none';
+
+  const allNonStrong = (d.topicPerformance || [])
+    .filter(t => t.level !== 'strong')
+    .sort((a, b) => a.score - b.score);
 
   const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>safeStr(t.topic)).join(', ')||'none';
   const devTopics   = (d.topicPerformance||[]).filter(t=>t.level==='developing').map(t=>safeStr(t.topic)).join(', ')||'none';
   const strongTopics= (d.topicPerformance||[]).filter(t=>t.level==='strong').map(t=>safeStr(t.topic)).join(', ')||'none';
   const mistakes    = (d.keyMistakes||[]).map(m=>safeStr(m.title)).join(', ')||'none';
   const urgentGaps  = (d.urgentGaps||[]).map(s=>safeStr(s)).join(', ')||'none';
-  
-  const allNonStrong = (d.topicPerformance||[]).filter(t=>t.level!=='strong');
-  const w1focus = safeStr((allNonStrong[0]||{}).topic || subject).slice(0,45);
-  const w2focus = safeStr((allNonStrong[1]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
-  const w3focus = safeStr((allNonStrong[2]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
 
-  const prompt = `Create a detailed personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values under 80 characters. No newlines inside strings.
+  const w1focus = safeStr((allNonStrong[0]||{}).topic || subject).slice(0, 45);
+  const w2focus = safeStr((allNonStrong[1]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0, 45);
+  const w3focus = safeStr((allNonStrong[2]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0, 45);
+
+  // Summarise the worst-performing questions per week-topic for the model
+  const w1Questions = (d.questions||[])
+    .filter(q => q.marksAwarded < q.marksAvailable && (q.topic||'').toLowerCase().includes(w1focus.toLowerCase().slice(0,12)))
+    .map(q => `Q${q.number}: ${safeStr(q.questionText)} (${q.marksAwarded}/${q.marksAvailable})`)
+    .slice(0, 3).join('; ') || 'general weak area';
+  const w2Questions = (d.questions||[])
+    .filter(q => q.marksAwarded < q.marksAvailable && (q.topic||'').toLowerCase().includes(w2focus.toLowerCase().slice(0,12)))
+    .map(q => `Q${q.number}: ${safeStr(q.questionText)} (${q.marksAwarded}/${q.marksAvailable})`)
+    .slice(0, 3).join('; ') || 'general weak area';
+
+  const prompt = `Create a personalised 4-week study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values ASCII under 80 chars. No newlines inside strings.
 
 Student: ${studentName}, ${grade}, ${subject}
 Current score: ${currentScore}%
-Target score: ${minTarget}% (this is the targetScore value — do NOT change it)
-Weak topics: ${weakTopics}
+Target score: ${minTarget}% — use this EXACT number as targetScore
+Weak topics (lowest score first): ${allNonStrong.map(t=>`${safeStr(t.topic)} ${t.score}%`).join(', ')||'none'}
 Developing topics: ${devTopics}
 Strong topics: ${strongTopics}
-Key mistakes: ${mistakes}
+Key mistake patterns: ${mistakes}
 Urgent gaps: ${urgentGaps}
 
+WRONG AND PARTIAL QUESTIONS (use these to make each week action specific):
+${wrongQuestions}
+
+Week 1 focus topic: ${w1focus}
+Week 1 specific wrong questions in this topic: ${w1Questions}
+Week 2 focus topic: ${w2focus}
+Week 2 specific wrong questions in this topic: ${w2Questions}
+
+INSTRUCTIONS — each week must have 3 actions that directly name the topic, specific error, or question type above. Do NOT write generic actions like "review core concepts" — instead write e.g. "Rework Q3 and Q7 on ${w1focus} — identify where the method broke down" or "Practise 10 exam questions on ${w2focus} focusing on the sign error pattern". Actions must be grounded in the wrong questions and mistake patterns listed above.
+
 STRICT JSON RULES:
-- No apostrophes anywhere (write "do not" not "don't", "it is" not "it's")
-- No special characters or non-ASCII in any string value
+- No apostrophes anywhere
+- No special characters or non-ASCII
 - All string values under 80 characters
 - Exactly 4 week steps, exactly 3 actions per step, exactly 1 resource per step
-- dailyHabits: exactly 3 items, each under 70 characters
-- examTips: exactly 3 items, each under 70 characters
+- dailyHabits: exactly 3 items under 70 chars each
+- examTips: exactly 3 items under 70 chars each
 - targetScore must be exactly ${minTarget}
 - timeframe must be exactly "4 weeks"
 
-Return this exact JSON structure:
-{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation: ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["Review core rules and definitions for ${w1focus.slice(0,25)}","Redo the questions missed in this exam from scratch","Complete 15 targeted practice questions with worked solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score at least 70 percent on a ${w1focus.slice(0,20)} mini-test"},{"week":2,"title":"Build: ${w2focus.slice(0,32)}","focus":"${w2focus}","actions":["Watch two tutorial videos on ${w2focus.slice(0,25)}","Complete one full topic past paper section","Write a summary of key methods in own words"],"resources":["${isMath()?'Khan Academy '+w2focus.slice(0,20)+' videos':'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"Complete all ${w2focus.slice(0,20)} practice questions with no concept errors"},{"week":3,"title":"Consolidate Mixed Topics","focus":"${w3focus}","actions":["Do mixed-topic timed drills covering all weak areas","Identify and rewrite any remaining error patterns","Attempt a full practice paper under timed conditions"],"resources":["${isMath()?'DrFrostMaths mixed topic set':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on a mixed practice paper"},{"week":4,"title":"Exam Readiness","focus":"Timed practice and review","actions":["Complete two full past papers under real exam conditions","Mark each paper using the mark scheme and note errors","Rest well and review one page of key notes each day"],"resources":["${isMath()?'Exam board official past papers':'Past exam papers with mark schemes'}"],"milestone":"Feel confident with all topics and score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["Spend 20 minutes on ${subject} practice every day","Write out key formulas or rules from memory before checking","Review any question you got wrong before moving on"],"examTips":["${isMath()?'Show all working even if unsure - method marks are available':'Re-read the question twice before writing your answer'}","Check your answer makes sense before moving to the next question","${isMath()?'Underline key numbers and operations in word problems':'Plan your answer briefly before writing in full'}"]}
+{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Fix ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["","",""],"resources":[""],"milestone":""},{"week":2,"title":"Fix ${w2focus.slice(0,30)}","focus":"${w2focus}","actions":["","",""],"resources":[""],"milestone":""},{"week":3,"title":"Consolidate all weak topics","focus":"Mixed: ${weakTopics.slice(0,40)}","actions":["","",""],"resources":[""],"milestone":""},{"week":4,"title":"Exam Readiness","focus":"Timed practice and review","actions":["","",""],"resources":[""],"milestone":""}],"dailyHabits":["","",""],"examTips":["","",""]}
 
+Fill every empty string field with specific, non-generic content grounded in the student data above.
 ${mathPlanExtras()}`;
 
   async function planCall(p) {
@@ -1667,7 +1636,7 @@ ${mathPlanExtras()}`;
       action: 'ollama-chat',
       model: DEFAULT_TEXT_MODEL,
       messages: [
-        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it.' },
+        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it. Every action string must be specific to the student weak topics and wrong questions given — never write generic actions.' },
         { role: 'user', content: p }
       ],
       options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192},
@@ -1688,8 +1657,8 @@ ${mathPlanExtras()}`;
       document.getElementById('plan-content').innerHTML =
         `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Retrying with simpler plan…</div></div>`;
       const simplePrompt = `Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All strings under 80 characters.
-Action plan for ${studentName} studying ${subject}. Current score: ${currentScore}%. Target: ${minTarget}%. Weak areas: ${weakTopics||subject}.
-{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Foundation Week","focus":"${w1focus.slice(0,40)}","actions":["Review core concepts for ${w1focus.slice(0,30)}","Redo missed exam questions from scratch","Practice 15 targeted questions with solutions"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score 70 percent on a topic mini-test"},{"week":2,"title":"Practice Week","focus":"${w2focus.slice(0,40)}","actions":["Watch tutorial videos on ${w2focus.slice(0,30)}","Complete one full topic exam section","Write key method steps in own words"],"resources":["${isMath()?'Khan Academy videos on '+w2focus.slice(0,20):'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"No concept errors on ${w2focus.slice(0,20)} practice"},{"week":3,"title":"Consolidation Week","focus":"Mixed weak topics","actions":["Timed mixed-topic drills on all weak areas","Rewrite all error patterns found so far","Complete a full timed practice paper"],"resources":["${isMath()?'Past paper mixed section':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on mixed practice"},{"week":4,"title":"Exam Prep Week","focus":"Final review and timed papers","actions":["Complete two full past papers under exam conditions","Mark with official mark scheme and note all errors","Rest and review one page of key notes each day"],"resources":["${isMath()?'Official exam board past papers':'Past exam papers with mark schemes'}"],"milestone":"Score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["20 minutes of ${subject} practice daily","Write key formulas from memory then check","Review every wrong answer before moving on"],"examTips":["${isMath()?'Show all working for method marks':'Re-read each question carefully before answering'}","Check answers make sense before moving on","${isMath()?'Underline key numbers in word problems':'Plan briefly before writing long answers'}"]}`;
+Action plan for ${studentName} studying ${subject}. Current score: ${currentScore}%. Target: ${minTarget}%. Weakest areas: ${w1focus}, ${w2focus}. Wrong questions: ${wrongQuestions.slice(0,300)}.
+{"targetScore":${minTarget},"timeframe":"4 weeks","steps":[{"week":1,"title":"Fix ${w1focus.slice(0,30)}","focus":"${w1focus}","actions":["Rework the wrong ${w1focus} questions from the exam step by step","Find and correct the specific error pattern in ${w1focus}","Complete 10 fresh ${w1focus} exam questions checking each answer"],"resources":["${isMath()?'Corbettmaths '+w1focus.slice(0,20)+' worksheet':'Textbook chapter on '+w1focus.slice(0,25)}"],"milestone":"Score 70 percent on a ${w1focus.slice(0,20)} topic test"},{"week":2,"title":"Fix ${w2focus.slice(0,30)}","focus":"${w2focus}","actions":["Rework the wrong ${w2focus} questions from the exam step by step","Watch a tutorial on the ${w2focus} method that was wrong","Complete one full ${w2focus} past paper section"],"resources":["${isMath()?'Khan Academy videos on '+w2focus.slice(0,20):'Revision guide chapter on '+w2focus.slice(0,22)}"],"milestone":"No concept errors on ${w2focus.slice(0,20)} practice set"},{"week":3,"title":"Consolidate all weak topics","focus":"Mixed weak topics","actions":["Timed mixed drills on all weak topics: ${weakTopics.slice(0,35)}","Rewrite every error pattern spotted so far in own words","Complete one full timed practice paper"],"resources":["${isMath()?'Past paper mixed section':'Past paper from previous year'}"],"milestone":"Score above ${Math.min(currentScore+8,95)} percent on mixed practice"},{"week":4,"title":"Exam Readiness","focus":"Final review and timed papers","actions":["Complete two full past papers under real exam conditions","Mark with official mark scheme and note all remaining errors","Rest well and review one page of key notes per day"],"resources":["${isMath()?'Official exam board past papers':'Past exam papers with mark schemes'}"],"milestone":"Score above ${Math.min(minTarget-2,98)} percent on final mock"}],"dailyHabits":["20 minutes of ${subject} practice every day","Write out the method for one weak topic from memory then check","Review every wrong answer before moving on to new material"],"examTips":["${isMath()?'Show all working even if unsure — method marks are available':'Re-read every question carefully before writing your answer'}","Check your answer makes sense before moving to the next question","${isMath()?'Underline key numbers and units in word problems':'Plan your answer briefly before writing in full'}"]}`;
       const raw2 = await planCall(simplePrompt);
       let plan2 = parseJSON(raw2);
       if (!plan2.targetScore || plan2.targetScore <= currentScore) {
