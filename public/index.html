@@ -1468,12 +1468,11 @@ async function runPlan() {
   const strongTopics= (d.topicPerformance||[]).filter(t=>t.level==='strong').map(t=>safeStr(t.topic)).join(', ')||'none';
   const mistakes    = (d.keyMistakes||[]).map(m=>safeStr(m.title)).join(', ')||'none';
   const urgentGaps  = (d.urgentGaps||[]).map(s=>safeStr(s)).join(', ')||'none';
-  const primaryWeak = (d.topicPerformance||[]).filter(t=>t.level==='weak')[0];
-  const secondWeak  = (d.topicPerformance||[]).filter(t=>t.level==='weak')[1];
-  const thirdArea   = (d.topicPerformance||[]).filter(t=>t.level!=='strong')[2];
-  const w1focus     = safeStr(primaryWeak ? primaryWeak.topic : weakTopics.split(',')[0] || subject).slice(0,45);
-  const w2focus     = safeStr(secondWeak  ? secondWeak.topic  : weakTopics.split(',')[1] || w1focus).slice(0,45);
-  const w3focus     = safeStr(thirdArea   ? thirdArea.topic   : devTopics.split(',')[0]  || subject).slice(0,45);
+  
+  const allNonStrong = (d.topicPerformance||[]).filter(t=>t.level!=='strong');
+  const w1focus = safeStr((allNonStrong[0]||{}).topic || subject).slice(0,45);
+  const w2focus = safeStr((allNonStrong[1]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
+  const w3focus = safeStr((allNonStrong[2]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0,45);
 
   const prompt = `Create a detailed personalised study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes anywhere. Keep every string value under 80 characters. No newlines inside strings.
 
