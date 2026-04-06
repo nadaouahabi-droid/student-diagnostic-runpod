@@ -697,7 +697,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
           { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately.' },
           { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
+        options: { temperature: 0.05, num_predict: 8192, num_ctx: 16384 },
         timeout_seconds: Math.round(timeoutMin * 60)
       }, timeoutMin * 60000 + 30000);
       pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`);
@@ -763,7 +763,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
       },
       { role: 'user', content: fullPrompt }
     ],
-    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768},
+    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768 },
     timeout_seconds: Math.round(timeoutMin * 3 * 60)
   }, timeoutMin * 3 * 60000 + 30000);
   return finalOut.content || '';
@@ -796,12 +796,11 @@ async function verifyMarksWithVision(images, pageInterpretations) {
           { role: 'system', content: 'You are an expert exam marker. Look carefully at red ink only.' },
           { role: 'user', content: marksPrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.0, num_predict: 1024, num_ctx: 65536 },
+        options: { temperature: 0.0, num_predict: 1024, num_ctx: 16384 },
         timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
       }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
 
       const content = (out.content || '').trim();
-      // Parse lines like "Q1: 2" or "Q1a: 0"
       const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
       let m;
       while ((m = lineRe.exec(content)) !== null) {
@@ -971,6 +970,34 @@ function parseJSON(raw) {
   }
 }
 
+// ── QUESTION NUMBER HELPERS ──
+// Component-based parent-child detection.
+// Fixes the bug where "1(a)(ii)".startsWith("1(a)(i)") = true caused
+// Q1(a)(i) to be incorrectly treated as a parent of Q1(a)(ii) and removed.
+function _qComponents(num) {
+  var s = String(num).toLowerCase().replace(/^q/, '');
+  var parts = [], i = 0;
+  var dm = s.match(/^\d+/);
+  if (dm) { parts.push(dm[0]); i = dm[0].length; }
+  while (i < s.length) {
+    if (s[i] === '(') {
+      var close = s.indexOf(')', i);
+      if (close > i) { parts.push(s.slice(i + 1, close)); i = close + 1; }
+      else { i++; }
+    } else if (/[a-z]/i.test(s[i])) {
+      var lm = s.slice(i).match(/^[a-z]+/i);
+      if (lm) { parts.push(lm[0].toLowerCase()); i += lm[0].length; }
+      else { i++; }
+    } else { i++; }
+  }
+  return parts;
+}
+function _isQChild(childNum, parentNum) {
+  var cp = _qComponents(childNum), pp = _qComponents(parentNum);
+  if (cp.length <= pp.length) return false;
+  return pp.every(function(p, idx) { return p === cp[idx]; });
+}
+
 // ── NORMALIZER ──
 function normalizeAnalysis(d) {
   d.marksObtained=parseFloat(String(d.marksObtained).replace(/[^\d.]/g,''))||0;
@@ -985,17 +1012,14 @@ function normalizeAnalysis(d) {
       _origIdx: idx
     }));
 
+    // FIX: use component-based child detection to avoid false positives
+    // e.g. "1(a)(ii)".startsWith("1(a)(i)") wrongly made Q1(a)(i) appear as a parent
     d.questions = d.questions.filter(q => {
-      const num = String(q.number);
-      const children = d.questions.filter(other => {
-          const oNum = String(other.number);
-          if (oNum === num) return false;
-          if (!oNum.startsWith(num)) return false;
-          const suffix = oNum.slice(num.length);
-          return /^[a-zA-Z(]/.test(suffix);
-      });
-      return children.length < 2;  
-  });
+      const children = d.questions.filter(other =>
+        other.number !== q.number && _isQChild(String(other.number), String(q.number))
+      );
+      return children.length < 2;
+    });
 
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
@@ -1010,17 +1034,12 @@ function normalizeAnalysis(d) {
       return true;
     });
 
-    d.questions = d.questions.filter(q => {
-      const num = String(q.number);
-      const hasChildren = d.questions.some(other => {
-        const oNum = String(other.number);
-        if (oNum === num) return false;
-        if (!oNum.startsWith(num)) return false;
-        const suffix = oNum.slice(num.length);
-        return /^[a-zA-Z(]/.test(suffix);
-      });
-      return !hasChildren;
-    });
+    // FIX: use component-based child detection (second pass — removes true parents)
+    d.questions = d.questions.filter(q =>
+      !d.questions.some(other =>
+        other.number !== q.number && _isQChild(String(other.number), String(q.number))
+      )
+    );
 
     const totalAvail=d.questions.reduce((s,q)=>s+q.marksAvailable,0);
     const totalAwarded=d.questions.reduce((s,q)=>s+q.marksAwarded,0);
@@ -1057,9 +1076,6 @@ function normalizeAnalysis(d) {
 }
 
 // ── SCORE REFINEMENT ──
-// Second AI pass: uses raw OCR student-answer text to correct marksAwarded
-// where the vision model may have misread the teacher's red ink.
-// Returns the (possibly updated) analysis object. Non-fatal on any error.
 async function refineQuestionScores(analysis) {
   if (!APP.rawPageText || !(analysis.questions || []).length) return analysis;
 
@@ -1125,7 +1141,7 @@ async function refineQuestionScores(analysis) {
         },
         { role: 'user', content: prompt }
       ],
-      options: { temperature: 0.05, num_predict: 2048, num_ctx: 20000 },
+      options: { temperature: 0.05, num_predict: 2048, num_ctx: 12000 },
       timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
     }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
 
@@ -1134,7 +1150,6 @@ async function refineQuestionScores(analysis) {
 
     if (!refinements.length) return analysis;
 
-    // Build lookup: question number -> refined marksAwarded
     const refMap = {};
     refinements.forEach(r => {
       const key = String(r.number || '').replace(/^Q/i, '').trim();
@@ -1142,7 +1157,6 @@ async function refineQuestionScores(analysis) {
       if (key && !isNaN(val)) refMap[key] = val;
     });
 
-    // Apply refined values, clamped to [0, marksAvailable]
     analysis.questions = analysis.questions.map(q => {
       const key = String(q.number).trim();
       if (!refMap.hasOwnProperty(key)) return q;
@@ -1150,7 +1164,6 @@ async function refineQuestionScores(analysis) {
       return { ...q, marksAwarded: refined };
     });
 
-    // Recompute totals
     const totalAwarded = analysis.questions.reduce((s, q) => s + q.marksAwarded, 0);
     analysis.marksObtained = totalAwarded;
     const sc = analysis.totalMarks > 0 ? Math.round((totalAwarded / analysis.totalMarks) * 100) : 0;
@@ -1158,7 +1171,6 @@ async function refineQuestionScores(analysis) {
     analysis.grade = sc >= 75 ? 'A1' : sc >= 70 ? 'A2' : sc >= 65 ? 'B3' : sc >= 60 ? 'B4'
                    : sc >= 55 ? 'C5' : sc >= 50 ? 'C6' : sc >= 45 ? 'D7' : sc >= 40 ? 'E8' : 'F9';
 
-    // Recompute topic performance
     const topicMap = {};
     analysis.questions.forEach(q => {
       const t = q.topic || 'Unknown';
@@ -1182,7 +1194,6 @@ async function refineQuestionScores(analysis) {
 
     console.log('Score refinement applied', refinements.length, 'change(s):', refMap);
   } catch(e) {
-    // Refinement is best-effort — never blocks the main flow
     console.warn('Score refinement skipped (non-fatal):', e.message);
   }
 
