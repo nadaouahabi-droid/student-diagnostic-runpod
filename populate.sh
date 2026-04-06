@@ -8,17 +8,17 @@ echo "=== Checking volume is mounted ==="
 df -h | grep runpod-volume || { echo "ERROR: /runpod-volume not mounted"; exit 1; }
 
 # ── Canonical paths ──────────────────────────────────────────
-export PADDLE_HOME=/runpod-volume1/paddle-cache/.paddleocr
-export PADDLEOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
+export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
 export PPOCR_HOME=$PADDLEOCR_HOME
-export PADDLEX_HOME=/runpod-volume1/paddle-cache/.paddlex
-export HF_HOME=/runpod-volume1/hf-cache/huggingface
+export PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
+export HF_HOME=/runpod-volume/hf-cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME
-export OLLAMA_MODELS=/runpod-volume1/ollama-models
+export OLLAMA_MODELS=/runpod-volume/ollama-models
 export FLAGS_use_mkldnn=0
 export PADDLE_DISABLE_MKLDNN=1
 
-PYPACKAGES=/runpod-volume1/pypackages
+PYPACKAGES=/runpod-volume/pypackages
 mkdir -p "$PADDLEOCR_HOME" "$PADDLEX_HOME" "$HF_HOME" "$OLLAMA_MODELS" "$PYPACKAGES"
 
 TROCR_CHECKPOINT="microsoft/trocr-base-handwritten"
@@ -72,20 +72,20 @@ $PIP install --target="$PYPACKAGES" --quiet \
 echo "=== Downloading PaddleOCR models ==="
 
 # Force HOME so ~/.paddleocr resolves to our volume path
-export HOME=/runpod-volume1/paddle-cache
-export PADDLE_HOME=/runpod-volume1/paddle-cache/.paddleocr
-export PADDLEOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
-export PPOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
+export HOME=/runpod-volume/paddle-cache
+export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PPOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
 
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 
-os.environ["HOME"]           = "/runpod-volume1/paddle-cache"
-os.environ["PADDLE_HOME"]    = "/runpod-volume1/paddle-cache/.paddleocr"
-os.environ["PADDLEOCR_HOME"] = "/runpod-volume1/paddle-cache/.paddleocr"
-os.environ["PPOCR_HOME"]     = "/runpod-volume1/paddle-cache/.paddleocr"
+os.environ["HOME"]           = "/runpod-volume/paddle-cache"
+os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache/.paddleocr"
+os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
+os.environ["PPOCR_HOME"]     = "/runpod-volume/paddle-cache/.paddleocr"
 
-sys.path.insert(0, "/runpod-volume1/pypackages")
+sys.path.insert(0, "/runpod-volume/pypackages")
 
 from paddleocr import PaddleOCR
 from PIL import Image
@@ -181,7 +181,7 @@ find /runpod-volume -maxdepth 3 -type d
 
 echo ""
 echo "=== DISK USAGE ==="
-du -sh /runpod-volume1/*
+du -sh /runpod-volume/*
 
 echo ""
 echo "✅ Volume fully populated."
