@@ -1310,7 +1310,8 @@ RULES FOR questions array:
 - number: STRING — exact label from the exam e.g. "1", "2", "1a", "1b", "2c" (no spaces, no leading "Q")
 - Sub-sub-questions: "1a(i)", "1a(ii)" — keep parens as-is
 - If question 1 has sub-parts (a), (b), list each SEPARATELY: "1a", "1b" — do NOT merge
-- questionText: a brief (max 15 word) description of what the question asks — taken directly from the exam — NO double-quote chars, ASCII only
+- questionText: a brief (max 15 words) description of what the question asks — taken directly from the exam — NO double-quote chars, ASCII only
+- Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
 - marksAvailable / marksAwarded: numeric
 
 RULES FOR topicPerformance:
