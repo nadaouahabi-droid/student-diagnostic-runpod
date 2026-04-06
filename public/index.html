@@ -610,6 +610,7 @@ function setLoadingState(pageId, title, sub, current, total) {
       </div>
     </div>`;
 
+  // Rotate tips every 8 seconds
   clearInterval(window._tipInterval);
   window._tipInterval = setInterval(() => {
     const box = document.getElementById(pageId + '-tip-box');
