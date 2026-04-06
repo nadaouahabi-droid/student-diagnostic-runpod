@@ -763,7 +763,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
       },
       { role: 'user', content: fullPrompt }
     ],
-    options: { temperature: 0.05, num_predict: 8192, num_ctx: 65536 },
+    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768},
     timeout_seconds: Math.round(timeoutMin * 3 * 60)
   }, timeoutMin * 3 * 60000 + 30000);
   return finalOut.content || '';
