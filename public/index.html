@@ -655,10 +655,12 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     return out.content || '';
   }
 
-  const pageInterpretations = await Promise.all(images.map(async (img, i) => {
-    updateLoadingText('analysis',
-      `Reading ${images.length} pages in parallel…`,
-      'Extracting text and handwriting'
+  const pageInterpretations = [];
+  for (let i = 0; i < images.length; i++) {
+    setLoadingState('analysis',
+      `Reading page ${i + 1} of ${images.length}…`,
+      'Identifying questions, marks, ticks and corrections',
+      i, images.length
     );
   
     const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
@@ -769,49 +771,48 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 }
 
 async function verifyMarksWithVision(images, pageInterpretations) {
-  const marksPrompt =
-    'You are checking ONLY the marks awarded by the teacher on this exam page.\n' +
-    'The teacher marks EXCLUSIVELY in RED INK.\n\n' +
-    'For every question number visible on this page, report:\n' +
-    'Q<number>: <marks awarded as a number, or "unmarked" if no red ink present>\n\n' +
-    'Rules:\n' +
-    '- Count each red tick as 1 mark\n' +
-    '- A red circled or boxed number overrides the tick count — use that number\n' +
-    '- A red cross = 0\n' +
-    '- Student writing is NOT in red — ignore it\n' +
-    '- If you see no red ink at all for a question write "unmarked"\n' +
-    '- Do not guess. Only report what you can clearly see in red ink.\n\n' +
-    'Output ONLY lines in this exact format, one per question:\n' +
-    'Q1: 2\nQ2: 0\nQ3: unmarked\n...';
+  const verified = [];
 
-  const pageResults = await Promise.all(images.map(async (img, i) => {
+  for (let i = 0; i < images.length; i++) {
+    const marksPrompt =
+      'You are checking ONLY the marks awarded by the teacher on this exam page.\n' +
+      'The teacher marks EXCLUSIVELY in RED INK.\n\n' +
+      'For every question number visible on this page, report:\n' +
+      'Q<number>: <marks awarded as a number, or "unmarked" if no red ink present>\n\n' +
+      'Rules:\n' +
+      '- Count each red tick as 1 mark\n' +
+      '- A red circled or boxed number overrides the tick count — use that number\n' +
+      '- A red cross = 0\n' +
+      '- Student writing is NOT in red — ignore it\n' +
+      '- If you see no red ink at all for a question write "unmarked"\n' +
+      '- Do not guess. Only report what you can clearly see in red ink.\n\n' +
+      'Output ONLY lines in this exact format, one per question:\n' +
+      'Q1: 2\nQ2: 0\nQ3: unmarked\n...';
+
     try {
       const out = await runpodCall({
         action: 'ollama-chat',
         model: DEFAULT_VISION_MODEL,
         messages: [
           { role: 'system', content: 'You are an expert exam marker. Look carefully at red ink only.' },
-          { role: 'user', content: marksPrompt, images: [img.base64] }
+          { role: 'user', content: marksPrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.0, num_predict: 512, num_ctx: 8192 },
+        options: { temperature: 0.0, num_predict: 1024, num_ctx: 65536 },
         timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
       }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
 
       const content = (out.content || '').trim();
+      // Parse lines like "Q1: 2" or "Q1a: 0"
       const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
-      const found = [];
       let m;
       while ((m = lineRe.exec(content)) !== null) {
-        found.push({ number: m[1].trim(), marksAwarded: m[2].trim() });
+        verified.push({ number: m[1].trim(), marksAwarded: m[2].trim() });
       }
-      return found;
     } catch(err) {
       console.warn(`Marks verification failed for page ${i + 1}:`, err.message);
-      return [];
     }
-  }));
-
-  return pageResults.flat();
+  }
+  return verified;
 }
   
 async function callOllama(prompt, images) {
