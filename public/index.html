@@ -1237,8 +1237,7 @@ async function runDiagnostic() {
 
   goPage('analysis');
   await runAnalysis();
-  await runReport();
-  await runPlan();
+  await Promise.all([runReport(), runPlan()]);
 }
 
 // ── SUBJECT HELPERS ──
