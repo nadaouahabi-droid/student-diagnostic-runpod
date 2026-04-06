@@ -507,7 +507,7 @@ async function handlePDF(file) {
       canvas.height  = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       APP.images.push({
-        base64:   compressCanvas(canvas, 1800, 0.92),
+        base64:   compressCanvas(canvas, 2200, 0.92),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
@@ -566,26 +566,72 @@ function renderPreviews() {
 function setLoadingState(pageId, title, sub, current, total) {
   const el = document.getElementById(pageId + '-content');
   if (!el) return;
-  const pct  = total > 0 ? Math.round((current / total) * 100) : 0;
-  const dots = total > 0
+
+  const tips = [
+    "Tip: Always show your working — method marks are available even if the final answer is wrong.",
+    "Tip: Underline key numbers and units in word problems before solving.",
+    "Tip: Check your answer makes sense — does the size and sign feel right?",
+    "Tip: If stuck, move on and come back — don't waste time on one question.",
+    "Tip: Re-read the question after answering to make sure you answered what was asked.",
+    "Tip: Write neatly — markers can only award marks for what they can read.",
+    "Tip: Estimate first, then calculate — it helps catch big errors.",
+    "Tip: Show substitution steps clearly, especially in formula questions.",
+  ];
+  const tip = tips[Math.floor(Math.random() * tips.length)];
+
+  const pct  = total > 1 ? Math.round((current / total) * 100) : 0;
+  const dots = total > 1
     ? Array.from({ length: total }, (_, i) => {
         const cls = i < current ? 'done' : i === current ? 'active' : '';
-        return '<div class="pp-dot' + (cls ? ' ' + cls : '') + '"></div>';
+        return `<div class="pp-dot${cls ? ' ' + cls : ''}"></div>`;
       }).join('')
     : '';
-  const progressHtml = total > 1
-    ? '<div class="page-progress"><div class="pp-label">Page ' + current + ' of ' + total
-      + '</div><div class="pp-bar-wrap"><div class="pp-bar" style="width:' + pct
-      + '%"></div></div><div class="pp-dots">' + dots + '</div></div>'
-    : '';
-  el.innerHTML = '<div class="loading-state">'
-    + '<div class="spinner"></div>'
-    + '<div class="loading-text" id="' + pageId + '-loading-txt">' + title + '</div>'
-    + '<div class="loading-sub"  id="' + pageId + '-loading-sub">' + (sub || '') + '</div>'
-    + progressHtml
-    + '</div>';
-}
 
+  const progressHtml = total > 1 ? `
+    <div class="page-progress">
+      <div class="pp-label">Page ${current} of ${total}</div>
+      <div class="pp-bar-wrap"><div class="pp-bar" style="width:${pct}%"></div></div>
+      <div class="pp-dots">${dots}</div>
+    </div>` : '';
+
+  el.innerHTML = `
+    <div class="loading-state" style="gap:0">
+      <div style="width:64px;height:64px;margin-bottom:1.25rem;position:relative">
+        <svg viewBox="0 0 64 64" style="width:64px;height:64px;transform:rotate(-90deg)">
+          <circle cx="32" cy="32" r="28" fill="none" stroke="var(--cream-dim)" stroke-width="5"/>
+          <circle cx="32" cy="32" r="28" fill="none" stroke="var(--teal)" stroke-width="5"
+            stroke-dasharray="${2 * Math.PI * 28}"
+            stroke-dashoffset="${2 * Math.PI * 28 * (1 - (total > 1 ? pct / 100 : 0.15))}"
+            stroke-linecap="round"
+            style="transition:stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1)"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:14px;color:var(--teal);font-weight:400">
+          ${total > 1 ? pct + '%' : '…'}
+        </div>
+      </div>
+      <div class="loading-text" id="${pageId}-loading-txt" style="font-size:16px;color:var(--navy);font-weight:600">${title}</div>
+      <div class="loading-sub"  id="${pageId}-loading-sub" style="margin-top:4px;margin-bottom:1.5rem">${sub || ''}</div>
+      ${progressHtml}
+      <div id="${pageId}-tip-box" style="max-width:400px;margin-top:1.75rem;background:var(--amber-light);border:1px solid rgba(240,165,0,0.25);border-radius:var(--radius);padding:12px 16px;font-size:13px;color:#7a5c00;line-height:1.6;text-align:left;animation:fadeUp 0.4s var(--ease)">
+        💡 <strong>While you wait —</strong> ${tip}
+      </div>
+    </div>`;
+
+  // Rotate tips every 8 seconds
+  clearInterval(window._tipInterval);
+  window._tipInterval = setInterval(() => {
+    const box = document.getElementById(pageId + '-tip-box');
+    if (!box) { clearInterval(window._tipInterval); return; }
+    const next = tips[Math.floor(Math.random() * tips.length)];
+    box.style.opacity = '0';
+    box.style.transition = 'opacity 0.4s';
+    setTimeout(() => {
+      box.innerHTML = `💡 <strong>While you wait —</strong> ${next}`;
+      box.style.opacity = '1';
+    }, 400);
+  }, 8000);
+}
+  
 function updateLoadingText(pageId, title, sub) {
   const t = document.getElementById(pageId + '-loading-txt');
   const s = document.getElementById(pageId + '-loading-sub');
@@ -702,13 +748,31 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
         timeout_seconds: Math.round(timeoutMin * 60)
       }, timeoutMin * 60000 + 30000);
       pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`);
+      setLoadingState('analysis',
+        `Reading pages… (${Math.min(batch + 2, images.length)} of ${images.length} done)`,
+        'Extracting questions, marks and handwriting',
+        Math.min(batch + 2, images.length), images.length
+      );
     } catch(err) {
       console.warn(`Page ${i+1} vision call failed:`, err.message);
       pageInterpretations.push(`=== PAGE ${i+1} ===\n(vision model failed for this page: ${err.message})`);
     }
   }
 
-  updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
+  updateLoadingText('analysis', 'Building your diagnostic…', 'Almost there — analysing every question');
+  const analysisStages = [
+    'Identifying topic gaps…',
+    'Classifying mistake patterns…',
+    'Computing topic scores…',
+    'Checking for recurring errors…',
+    'Finalising your report…',
+  ];
+  let _si = 0;
+  clearInterval(window._stageInterval);
+  window._stageInterval = setInterval(() => {
+    _si = (_si + 1) % analysisStages.length;
+    updateLoadingText('analysis', 'Building your diagnostic…', analysisStages[_si]);
+  }, 4000);
   const combined   = pageInterpretations.join('\n\n');
   APP.rawPageText = combined;
 
@@ -1399,6 +1463,7 @@ RULES FOR topicPerformance:
   try {
     const raw    = await callAI(prompt, hasVisual ? imgs : null, null);
     APP.analysis = normalizeAnalysis(parseJSON(raw));
+    clearInterval(window._stageInterval);
     APP.analysis = await refineQuestionScores(APP.analysis);
     renderAnalysis(APP.analysis);
   } catch(e) {
