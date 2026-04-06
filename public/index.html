@@ -985,30 +985,11 @@ function normalizeAnalysis(d) {
       _origIdx: idx
     }));
 
-    d.questions = d.questions.filter(q => {
-      const num = String(q.number);
-      const children = d.questions.filter(other => {
-          const oNum = String(other.number);
-          if (oNum === num) return false;
-          if (!oNum.startsWith(num)) return false;
-          const suffix = oNum.slice(num.length);
-          return /^[a-zA-Z(]/.test(suffix);
-      });
-      return children.length < 2;  
-  });
-
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
     const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
     d.questions=d.questions.filter(q=>!/^\s*repetition[:\s]/i.test(q.questionText||''));
-    const _textSeen=new Set();
-    d.questions=d.questions.filter(q=>{
-      const norm=(q.questionText||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,60);
-      if(norm.length>4&&_textSeen.has(norm))return false;
-      if(norm.length>4)_textSeen.add(norm);
-      return true;
-    });
 
     d.questions = d.questions.filter(q => {
       const num = String(q.number);
@@ -1539,7 +1520,12 @@ function renderAnalysis(d) {
     ${(d.urgentGaps||[]).length?`<div class="alert-danger"><div class="alert-title">Priority gaps — address immediately</div>${d.urgentGaps.map(g=>`<div class="alert-item">→ ${g}</div>`).join('')}</div>`:''}
     <div class="card" style="background:var(--navy);border-color:rgba(255,255,255,0.1)">
       <div class="card-title" style="color:rgba(255,255,255,0.55)">Summary</div>
-      <p style="font-size:14px;color:rgba(255,255,255,0.55);line-height:1.7">${d.performanceSummary}</p>
+      <p style="font-size:14px;color:rgba(255,255,255,0.55);line-height:1.7">
+        <strong style="color:rgba(255,255,255,0.82);display:block;margin-bottom:6px">
+          ${d.marksObtained}/${d.totalMarks} marks · ${d.overallScore}% · Grade ${d.grade}
+        </strong>
+        ${d.performanceSummary}
+      </p>
     </div>
     <div class="action-row no-print">
       <button class="btn btn-primary"   onclick="generateWorksheet()">Generate practice worksheet</button>
