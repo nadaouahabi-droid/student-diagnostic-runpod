@@ -990,6 +990,14 @@ function normalizeAnalysis(d) {
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
     const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
     d.questions=d.questions.filter(q=>!/^\s*repetition[:\s]/i.test(q.questionText||''));
+    const _textSeen=new Set();
+    d.questions=d.questions.filter(q=>{
+      const norm=(q.questionText||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,80);
+      if(norm.length<12)return true;
+      if(_textSeen.has(norm))return false;
+      _textSeen.add(norm);
+      return true;
+    });
 
     d.questions = d.questions.filter(q => {
       const num = String(q.number);
@@ -1520,12 +1528,7 @@ function renderAnalysis(d) {
     ${(d.urgentGaps||[]).length?`<div class="alert-danger"><div class="alert-title">Priority gaps — address immediately</div>${d.urgentGaps.map(g=>`<div class="alert-item">→ ${g}</div>`).join('')}</div>`:''}
     <div class="card" style="background:var(--navy);border-color:rgba(255,255,255,0.1)">
       <div class="card-title" style="color:rgba(255,255,255,0.55)">Summary</div>
-      <p style="font-size:14px;color:rgba(255,255,255,0.55);line-height:1.7">
-        <strong style="color:rgba(255,255,255,0.82);display:block;margin-bottom:6px">
-          ${d.marksObtained}/${d.totalMarks} marks · ${d.overallScore}% · Grade ${d.grade}
-        </strong>
-        ${d.performanceSummary}
-      </p>
+      <p style="font-size:14px;color:rgba(255,255,255,0.55);line-height:1.7">${d.performanceSummary}</p>
     </div>
     <div class="action-row no-print">
       <button class="btn btn-primary"   onclick="generateWorksheet()">Generate practice worksheet</button>
