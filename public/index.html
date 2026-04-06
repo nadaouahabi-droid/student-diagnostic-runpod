@@ -1170,7 +1170,7 @@ Context: ${APP.context || 'none'}${textNote}
 STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers.
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
-3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
+3. If a question number is visible but you cannot read the text, skip it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
 5. TEACHER MARK RULE: if the teacher wrote 0 in RED ink, record marksAwarded as 0 UNLESS explicitly corrected.
 
