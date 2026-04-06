@@ -666,6 +666,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
   "Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
   Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
+  IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
   
   STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
   Q<number>: [exact question text as printed/written]
@@ -988,6 +989,7 @@ function normalizeAnalysis(d) {
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
     const _seen=new Set();d.questions=d.questions.filter(q=>{const k=String(q.number).toLowerCase().replace(/[\s()]/g,'');if(_seen.has(k))return false;_seen.add(k);return true;});
     d.questions=d.questions.filter(q=>!/^\s*repetition[:\s]/i.test(q.questionText||''));
+    d.questions=d.questions.filter(q=>!/^\s*illegible\s*$/i.test(q.questionText||''));
     const _textSeen=new Set();
     d.questions=d.questions.filter(q=>{
       const norm=(q.questionText||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,80);
@@ -1361,7 +1363,7 @@ Context: ${APP.context || 'none'}${textNote}
 STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers.
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
-3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
+3. If a question number is visible but you cannot read the text or the question does not exist, omit it entirely — do not include it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
 5. TEACHER MARK RULE: if the teacher wrote 0 in RED ink, record marksAwarded as 0 UNLESS explicitly corrected.
 
