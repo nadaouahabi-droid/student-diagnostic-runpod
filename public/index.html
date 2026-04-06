@@ -673,7 +673,16 @@ STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this 
 Q<number>: [exact question text as printed/written]
 MARKS AVAILABLE: [marks allocated — look for a number in square brackets at end of question line or right margin e.g. [2], [3 marks], (2). Also check inside answer boxes. Write the numeric value only e.g. 2. If truly absent write 0]
 STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-MARKS AWARDED: [marks the teacher gave — look specifically for RED INK (the teacher always marks in red): red ticks (each = 1 mark), red crosses, a circled or boxed number written in red ink. A circled/boxed number in red overrides tick count. If teacher wrote 0 in red, record 0 unless crossed out and replaced. If no red mark is present write "unmarked". Write a numeric value only e.g. 2 or 0]
+'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
+'\n  - Each red tick (checkmark) = 1 mark. Count them individually.' +
+'\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question. This OVERRIDES tick count.' +
+'\n  - A red cross = 0 marks for that line/part.' +
+'\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
+'\n  - A red number at the END of a question line = marks for that question only.' +
+'\n  - "oe", "ft", "ecf" written in red next to a number = accept that number as marks.' +
+'\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
+'\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
+'\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
 TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
 CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
 
@@ -703,6 +712,24 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
   const combined   = pageInterpretations.join('\n\n');
   APP.rawPageText = combined;
 
+  updateLoadingText('analysis', 'Verifying awarded marks…', 'Double-checking red ink marks on each page');
+  const marksVerified = await verifyMarksWithVision(images, pageInterpretations);
+  
+  if (marksVerified.length > 0) {
+    const correctionsBlock = '\n\n=== MARKS VERIFICATION (second pass — use these values for MARKS AWARDED) ===\n' +
+      marksVerified.map(v =>
+        `Q${v.number}: marks awarded = ${v.marksAwarded === 'unmarked' ? 'unmarked' : v.marksAwarded}`
+      ).join('\n') +
+      '\nINSTRUCTION: For any question listed above, the MARKS AWARDED value in this verification block ' +
+      'overrides the value extracted in the page transcripts above. If a question shows "unmarked" here ' +
+      'but has a value in the transcript, trust the transcript. If a question shows a numeric value here, ' +
+      'use that value regardless of what the transcript says.';
+  
+    APP.rawPageText = combined + correctionsBlock;
+  } else {
+    APP.rawPageText = combined;
+  }
+  
   const pageQuestionCounts = pageInterpretations.map(pt => {
     const matches = pt.match(/^Q[\w()]+:/gm) || [];
     return matches.length;
@@ -712,7 +739,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
     ? `\n\nQUESTION COUNT CHECK: The page transcripts above contain ${totalExpectedQs} question/sub-question block(s) across ${images.length} page(s). Your "questions" JSON array MUST have exactly ${totalExpectedQs} entries — one per block, in the order they appear (Page 1 first, then Page 2, etc.). Do not skip any. Do not merge any.`
     : '';
 
-  const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${combined}${countHint}`;
+  const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${APP.rawPageText}${countHint}`
 
   const finalOut = await runpodCall({
     action: 'ollama-chat',
@@ -743,6 +770,52 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
   return finalOut.content || '';
 }
 
+async function verifyMarksWithVision(images, pageInterpretations) {
+  const verified = [];
+
+  for (let i = 0; i < images.length; i++) {
+    const marksPrompt =
+      'You are checking ONLY the marks awarded by the teacher on this exam page.\n' +
+      'The teacher marks EXCLUSIVELY in RED INK.\n\n' +
+      'For every question number visible on this page, report:\n' +
+      'Q<number>: <marks awarded as a number, or "unmarked" if no red ink present>\n\n' +
+      'Rules:\n' +
+      '- Count each red tick as 1 mark\n' +
+      '- A red circled or boxed number overrides the tick count — use that number\n' +
+      '- A red cross = 0\n' +
+      '- Student writing is NOT in red — ignore it\n' +
+      '- If you see no red ink at all for a question write "unmarked"\n' +
+      '- Do not guess. Only report what you can clearly see in red ink.\n\n' +
+      'Output ONLY lines in this exact format, one per question:\n' +
+      'Q1: 2\nQ2: 0\nQ3: unmarked\n...';
+
+    try {
+      const out = await runpodCall({
+        action: 'ollama-chat',
+        model: DEFAULT_VISION_MODEL,
+        messages: [
+          { role: 'system', content: 'You are an expert exam marker. Look carefully at red ink only.' },
+          { role: 'user', content: marksPrompt, images: [images[i].base64] }
+        ],
+        options: { temperature: 0.0, num_predict: 1024, num_ctx: 65536 },
+        timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
+      }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
+
+      const content = (out.content || '').trim();
+      // Parse lines like "Q1: 2" or "Q1a: 0"
+      const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
+      let m;
+      while ((m = lineRe.exec(content)) !== null) {
+        verified.push({ number: m[1].trim(), marksAwarded: m[2].trim() });
+      }
+    } catch(err) {
+      console.warn(`Marks verification failed for page ${i + 1}:`, err.message);
+    }
+  }
+
+  return verified;
+}
+  
 async function callOllama(prompt, images) {
   return callOCRPipeline(prompt, images);
 }
@@ -998,8 +1071,23 @@ async function refineQuestionScores(analysis) {
     ', current=' + q.marksAwarded + ', topic=' + (q.topic || 'Unknown')
   ).join('\n');
 
-  const ocrSnippet = APP.rawPageText.slice(0, 14000);
+  const questionContexts = [];
+  for (const q of analysis.questions) {
+    const marker = 'Q' + q.number + ':';
+    const markerAlt = 'Q' + q.number + ' ';
+    let idx = APP.rawPageText.indexOf(marker);
+    if (idx < 0) idx = APP.rawPageText.indexOf(markerAlt);
+    if (idx >= 0) {
+      questionContexts.push(APP.rawPageText.slice(idx, idx + 500));
+    }
+  }
 
+  const verifyIdx = APP.rawPageText.indexOf('=== MARKS VERIFICATION');
+  if (verifyIdx >= 0) {
+    questionContexts.push(APP.rawPageText.slice(verifyIdx));
+  }
+  
+  const ocrSnippet = questionContexts.join('\n---\n').slice(0, 18000);
   const prompt = [
     'You are an expert exam marker. Using the raw OCR transcript below, verify the marks awarded for each question.',
     'Only correct a mark when the student answer visible in the transcript clearly contradicts the current value.',
