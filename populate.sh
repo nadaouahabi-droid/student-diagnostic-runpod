@@ -8,17 +8,17 @@ echo "=== Checking volume is mounted ==="
 df -h | grep runpod-volume || { echo "ERROR: /runpod-volume not mounted"; exit 1; }
 
 # ── Canonical paths ──────────────────────────────────────────
-export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
-export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
+export PADDLE_HOME=/runpod-volume1/paddle-cache/.paddleocr
+export PADDLEOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
 export PPOCR_HOME=$PADDLEOCR_HOME
-export PADDLEX_HOME=/runpod-volume/paddle-cache/.paddlex
-export HF_HOME=/runpod-volume/hf-cache/huggingface
+export PADDLEX_HOME=/runpod-volume1/paddle-cache/.paddlex
+export HF_HOME=/runpod-volume1/hf-cache/huggingface
 export TRANSFORMERS_CACHE=$HF_HOME
-export OLLAMA_MODELS=/runpod-volume/ollama-models
+export OLLAMA_MODELS=/runpod-volume1/ollama-models
 export FLAGS_use_mkldnn=0
 export PADDLE_DISABLE_MKLDNN=1
 
-PYPACKAGES=/runpod-volume/pypackages
+PYPACKAGES=/runpod-volume1/pypackages
 mkdir -p "$PADDLEOCR_HOME" "$PADDLEX_HOME" "$HF_HOME" "$OLLAMA_MODELS" "$PYPACKAGES"
 
 TROCR_CHECKPOINT="microsoft/trocr-base-handwritten"
@@ -72,20 +72,20 @@ $PIP install --target="$PYPACKAGES" --quiet \
 echo "=== Downloading PaddleOCR models ==="
 
 # Force HOME so ~/.paddleocr resolves to our volume path
-export HOME=/runpod-volume/paddle-cache
-export PADDLE_HOME=/runpod-volume/paddle-cache/.paddleocr
-export PADDLEOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
-export PPOCR_HOME=/runpod-volume/paddle-cache/.paddleocr
+export HOME=/runpod-volume1/paddle-cache
+export PADDLE_HOME=/runpod-volume1/paddle-cache/.paddleocr
+export PADDLEOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
+export PPOCR_HOME=/runpod-volume1/paddle-cache/.paddleocr
 
 PYTHONPATH="$PYPACKAGES" python3.10 - <<'EOF'
 import os, sys
 
-os.environ["HOME"]           = "/runpod-volume/paddle-cache"
-os.environ["PADDLE_HOME"]    = "/runpod-volume/paddle-cache/.paddleocr"
-os.environ["PADDLEOCR_HOME"] = "/runpod-volume/paddle-cache/.paddleocr"
-os.environ["PPOCR_HOME"]     = "/runpod-volume/paddle-cache/.paddleocr"
+os.environ["HOME"]           = "/runpod-volume1/paddle-cache"
+os.environ["PADDLE_HOME"]    = "/runpod-volume1/paddle-cache/.paddleocr"
+os.environ["PADDLEOCR_HOME"] = "/runpod-volume1/paddle-cache/.paddleocr"
+os.environ["PPOCR_HOME"]     = "/runpod-volume1/paddle-cache/.paddleocr"
 
-sys.path.insert(0, "/runpod-volume/pypackages")
+sys.path.insert(0, "/runpod-volume1/pypackages")
 
 from paddleocr import PaddleOCR
 from PIL import Image
@@ -147,14 +147,14 @@ for i in $(seq 1 30); do
     echo "  waiting for Ollama... ($i)"
 done
 
-OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5vl:7b-q8_0
+OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5vl:7b-q4_K_M
 OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5:7b-instruct-q4_K_M
 kill "$OLLAMA_PID" 2>/dev/null || true
 
 # ── Verify Ollama manifests (tag-level) ──────────────────────
 echo "=== Verifying Ollama manifests ==="
 MANIFEST_BASE="$OLLAMA_MODELS/manifests/registry.ollama.ai/library"
-REQUIRED_MODELS=("qwen2.5vl:7b-q8_0" "qwen2.5:7b-instruct-q4_K_M")
+REQUIRED_MODELS=("qwen2.5vl:7b-q4_K_M" "qwen2.5:7b-instruct-q4_K_M")
 MANIFEST_ERRORS=0
 
 for MODEL_TAG in "${REQUIRED_MODELS[@]}"; do
@@ -181,7 +181,7 @@ find /runpod-volume -maxdepth 3 -type d
 
 echo ""
 echo "=== DISK USAGE ==="
-du -sh /runpod-volume/*
+du -sh /runpod-volume1/*
 
 echo ""
 echo "✅ Volume fully populated."
