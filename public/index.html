@@ -662,51 +662,51 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       'Identifying questions, marks, ticks and corrections',
       i, images.length
     );
-  
+
     const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
-  ${mathOCRRules()}
-  STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
-  "Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
-  Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
-  IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
-  
-  STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
-  Q<number>: [exact question text as printed/written]
-  MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
-  STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-  'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
-  '\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
-  '\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
-  '\n  - A red number at the end of a question line, or positioned after the current question and before the next one = marks for that question only.' +
-  '\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
-  '\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
-  '\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
-  '\n  - Red X means the student answer is incorrect = 0 marks.' +
-  '\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
-  TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
-  CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
-  
-  PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
-  
-  STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MUST equal the "TOTAL QUESTIONS ON THIS PAGE" number from Step 1. If they differ, go back and add the missing question blocks before finishing.`;
-  
+${mathOCRRules()}
+STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
+"Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
+Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
+IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
+
+STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
+Q<number>: [exact question text as printed/written]
+MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
+STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
+'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
+'\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
+'\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
+'\n  - A red number at the end of a question line, or positioned after the current question and before the next one = marks for that question only.' +
+'\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
+'\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
+'\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
+'\n  - Red X means the student answer is incorrect = 0 marks.' +
+'\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
+TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
+CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+
+PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
+
+STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MUST equal the "TOTAL QUESTIONS ON THIS PAGE" number from Step 1. If they differ, go back and add the missing question blocks before finishing.`;
+
     try {
       const pageOut = await runpodCall({
         action: 'ollama-chat',
-        model: DEFAULT_VISION_MODEL,
+        model: visionModel,
         messages: [
           { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately.' },
-          { role: 'user', content: pagePrompt, images: [img.base64] }
+          { role: 'user', content: pagePrompt, images: [images[i].base64] }
         ],
         options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
-        timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-      }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
-      return `=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`;
+        timeout_seconds: Math.round(timeoutMin * 60)
+      }, timeoutMin * 60000 + 30000);
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`);
     } catch(err) {
       console.warn(`Page ${i+1} vision call failed:`, err.message);
-      return `=== PAGE ${i+1} ===\n(vision model failed for this page: ${err.message})`;
+      pageInterpretations.push(`=== PAGE ${i+1} ===\n(vision model failed for this page: ${err.message})`);
     }
-  }));
+  }
 
   updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
   const combined   = pageInterpretations.join('\n\n');
