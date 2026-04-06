@@ -205,7 +205,6 @@ select{cursor:pointer}
 .ws-textarea.mc-answer{min-height:36px}
 .ws-textarea.explanation{min-height:100px}
 .ws-textarea.answered{border-color:var(--teal)}
-.ws-field-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;display:block}
 .ws-feedback{margin-top:10px;border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--border)}
 .ws-feedback-correct{background:var(--green-light);border-color:rgba(40,168,112,0.3);padding:10px 14px}
 .ws-feedback-wrong{background:var(--red-light);border-color:rgba(224,76,76,0.25);padding:10px 14px}
@@ -641,6 +640,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   const timeoutMin  = DEFAULT_TIMEOUT_MIN;
 
   if (!images || !images.length) {
+    APP.rawPageText = prompt;
     updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
     const out = await runpodCall({
       action: 'ollama-chat',
@@ -701,6 +701,7 @@ STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MU
 
   updateLoadingText('analysis', 'Generating diagnostic analysis…', 'Pulling everything together — almost there');
   const combined   = pageInterpretations.join('\n\n');
+  APP.rawPageText = combined;
 
   const pageQuestionCounts = pageInterpretations.map(pt => {
     const matches = pt.match(/^Q[\w()]+:/gm) || [];
@@ -912,19 +913,17 @@ function normalizeAnalysis(d) {
       _origIdx: idx
     }));
 
-    d.questions = d.questions.map(q => {
-      if (q.marksAvailable === 0 && q.questionText) {
-        const mm = q.questionText.match(/\[(\d+)\s*marks?\]/i)
-                || q.questionText.match(/\((\d+)\s*marks?\)/i)
-                || q.questionText.match(/\[(\d+)\]/)
-                || q.questionText.match(/\((\d+)\)/);
-        if (mm) {
-          const extracted = parseInt(mm[1], 10);
-          if (extracted > 0) q.marksAvailable = extracted;
-        }
-      }
-      return q;
-    });
+    d.questions = d.questions.filter(q => {
+      const num = String(q.number);
+      const children = d.questions.filter(other => {
+          const oNum = String(other.number);
+          if (oNum === num) return false;
+          if (!oNum.startsWith(num)) return false;
+          const suffix = oNum.slice(num.length);
+          return /^[a-zA-Z(]/.test(suffix);
+      });
+      return children.length < 2;  
+  });
 
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
@@ -985,6 +984,124 @@ function normalizeAnalysis(d) {
   return d;
 }
 
+// ── SCORE REFINEMENT ──
+// Second AI pass: uses raw OCR student-answer text to correct marksAwarded
+// where the vision model may have misread the teacher's red ink.
+// Returns the (possibly updated) analysis object. Non-fatal on any error.
+async function refineQuestionScores(analysis) {
+  if (!APP.rawPageText || !(analysis.questions || []).length) return analysis;
+
+  updateLoadingText('analysis', 'Refining question scores…', 'Verifying marks against student answers');
+
+  const qList = analysis.questions.map(q =>
+    'Q' + q.number + ': available=' + q.marksAvailable +
+    ', current=' + q.marksAwarded + ', topic=' + (q.topic || 'Unknown')
+  ).join('\n');
+
+  const ocrSnippet = APP.rawPageText.slice(0, 14000);
+
+  const prompt = [
+    'You are an expert exam marker. Using the raw OCR transcript below, verify the marks awarded for each question.',
+    'Only correct a mark when the student answer visible in the transcript clearly contradicts the current value.',
+    'marksAwarded must be an integer between 0 and marksAvailable inclusive.',
+    '',
+    'RAW EXAM TRANSCRIPT:',
+    ocrSnippet,
+    '',
+    'CURRENT MARKS:',
+    qList,
+    '',
+    'STRICT JSON RULES:',
+    '1. Return ONLY a single valid JSON object - no markdown, no preamble.',
+    '2. Double quotes only. No trailing commas. No apostrophes.',
+    '3. No double-quote chars inside string values - use parentheses instead.',
+    '4. All string values pure ASCII under 60 characters.',
+    '5. If no corrections are needed return {"refinements":[]}',
+    '',
+    'Return this exact shape:',
+    '{"refinements":[{"number":"1","marksAwarded":2,"reason":"short reason under 60 chars"}]}'
+  ].join('\n');
+
+  try {
+    const raw = await runpodCall({
+      action: 'ollama-chat',
+      model: DEFAULT_TEXT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are an expert exam marker.',
+            'Return ONLY valid JSON. Double quotes only. No trailing commas. No markdown.',
+            'No double-quote characters inside string values.',
+            'All string values pure ASCII under 60 characters.'
+          ].join(' ')
+        },
+        { role: 'user', content: prompt }
+      ],
+      options: { temperature: 0.05, num_predict: 2048, num_ctx: 20000 },
+      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
+    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
+
+    const result = parseJSON(raw.content || '');
+    const refinements = Array.isArray(result.refinements) ? result.refinements : [];
+
+    if (!refinements.length) return analysis;
+
+    // Build lookup: question number -> refined marksAwarded
+    const refMap = {};
+    refinements.forEach(r => {
+      const key = String(r.number || '').replace(/^Q/i, '').trim();
+      const val  = parseInt(r.marksAwarded);
+      if (key && !isNaN(val)) refMap[key] = val;
+    });
+
+    // Apply refined values, clamped to [0, marksAvailable]
+    analysis.questions = analysis.questions.map(q => {
+      const key = String(q.number).trim();
+      if (!refMap.hasOwnProperty(key)) return q;
+      const refined = Math.min(q.marksAvailable, Math.max(0, refMap[key]));
+      return { ...q, marksAwarded: refined };
+    });
+
+    // Recompute totals
+    const totalAwarded = analysis.questions.reduce((s, q) => s + q.marksAwarded, 0);
+    analysis.marksObtained = totalAwarded;
+    const sc = analysis.totalMarks > 0 ? Math.round((totalAwarded / analysis.totalMarks) * 100) : 0;
+    analysis.overallScore  = Math.min(100, Math.max(0, sc));
+    analysis.grade = sc >= 75 ? 'A1' : sc >= 70 ? 'A2' : sc >= 65 ? 'B3' : sc >= 60 ? 'B4'
+                   : sc >= 55 ? 'C5' : sc >= 50 ? 'C6' : sc >= 45 ? 'D7' : sc >= 40 ? 'E8' : 'F9';
+
+    // Recompute topic performance
+    const topicMap = {};
+    analysis.questions.forEach(q => {
+      const t = q.topic || 'Unknown';
+      if (!topicMap[t]) topicMap[t] = { marksAvailable: 0, marksAwarded: 0, questionsAttempted: 0, mistakes: 0 };
+      topicMap[t].marksAvailable  += q.marksAvailable;
+      topicMap[t].marksAwarded    += q.marksAwarded;
+      if (q.marksAvailable > 0)    topicMap[t].questionsAttempted++;
+      if (q.marksAwarded < q.marksAvailable) topicMap[t].mistakes++;
+    });
+    analysis.topicPerformance = Object.entries(topicMap).map(([topic, v]) => {
+      const score = v.marksAvailable > 0 ? Math.round((v.marksAwarded / v.marksAvailable) * 100) : 0;
+      return {
+        topic, score,
+        level: score >= 70 ? 'strong' : score >= 50 ? 'developing' : 'weak',
+        questionsAttempted: v.questionsAttempted,
+        marksAvailable:     v.marksAvailable,
+        marksAwarded:       v.marksAwarded,
+        mistakes:           v.mistakes
+      };
+    });
+
+    console.log('Score refinement applied', refinements.length, 'change(s):', refMap);
+  } catch(e) {
+    // Refinement is best-effort — never blocks the main flow
+    console.warn('Score refinement skipped (non-fatal):', e.message);
+  }
+
+  return analysis;
+}
+
 // ── NAV / PAGE ──
 function goPage(p) {
   if (!APP.completedPages.has(p) && p !== 'input') return;
@@ -1033,7 +1150,7 @@ async function runDiagnostic() {
   }
 
   APP = { ...APP, studentName:name, grade, subject, examType, script, context,
-          analysis:null, report:null, plan:null, worksheet:null };
+          analysis:null, report:null, plan:null, worksheet:null, rawPageText:null };
 
   ['analysis','report','plan','worksheet'].forEach(p => {
     unlockPage(p);
@@ -1170,7 +1287,7 @@ Context: ${APP.context || 'none'}${textNote}
 STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 1. Your "questions" array must contain EXACTLY the questions present in the exam — same count, same identifiers.
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
-3. If a question number is visible but you cannot read the text, skip it.
+3. If a question number is visible but you cannot read the text, set questionText to "illegible" — do not skip it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
 5. TEACHER MARK RULE: if the teacher wrote 0 in RED ink, record marksAwarded as 0 UNLESS explicitly corrected.
 
@@ -1205,6 +1322,7 @@ RULES FOR topicPerformance:
   try {
     const raw    = await callAI(prompt, hasVisual ? imgs : null, null);
     APP.analysis = normalizeAnalysis(parseJSON(raw));
+    APP.analysis = await refineQuestionScores(APP.analysis);
     renderAnalysis(APP.analysis);
   } catch(e) {
     document.getElementById('analysis-content').innerHTML = errCard('Analysis failed: ' + e.message);
@@ -1438,12 +1556,6 @@ function renderReport(r) {
     qbSource=qbSource.filter(q=>{const k=String(q.question||'').replace(/^Q/i,'').trim().toLowerCase().replace(/[\s()]/g,'');if(_rSeen.has(k))return false;_rSeen.add(k);return true;});
   }
 
-  // ── Compute diagnosis values from ground-truth analysis data ─────────────
-  // Override AI-generated values which are often hallucinated.
-  // totalMarksLost comes directly from the normalised analysis marks.
-  // conceptErrorMarksLost / carelessMistakesMarksLost are derived from the
-  // per-question errorType classification that was already done by the AI in
-  // the report step and then cross-checked against qbSource here.
   const computedTotalLost = (d.totalMarks || 0) - (d.marksObtained || 0);
   const computedConceptLost = qbSource
     .filter(q => q.errorType === 'concept' || q.errorType === 'no attempt')
@@ -1451,7 +1563,6 @@ function renderReport(r) {
   const computedCarelessLost = qbSource
     .filter(q => q.errorType === 'careless')
     .reduce((s, q) => s + (parseInt(q.marksLost) || 0), 0);
-  // Biggest weak topic: lowest-scoring non-strong topic from actual analysis
   const computedBiggestWeak = (d.topicPerformance || [])
     .filter(t => t.level !== 'strong')
     .sort((a, b) => a.score - b.score)[0]?.topic || dg.biggestWeakTopic || '–';
@@ -1564,7 +1675,6 @@ async function runPlan() {
   const currentScore = d.overallScore || 0;
   const minTarget = Math.min(100, Math.max(currentScore + 12, 60));
 
-  // ── Build rich wrong-question context so the model writes specific actions ──
   const wrongQuestions = (d.questions || [])
     .filter(q => q.marksAwarded < q.marksAvailable)
     .map(q => `Q${q.number} [${safeStr(q.topic)}]: ${safeStr(q.questionText)} — got ${q.marksAwarded}/${q.marksAvailable} marks`)
@@ -1585,7 +1695,6 @@ async function runPlan() {
   const w2focus = safeStr((allNonStrong[1]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0, 45);
   const w3focus = safeStr((allNonStrong[2]||{}).topic || (allNonStrong[0]||{}).topic || subject).slice(0, 45);
 
-  // Summarise the worst-performing questions per week-topic for the model
   const w1Questions = (d.questions||[])
     .filter(q => q.marksAwarded < q.marksAvailable && (q.topic||'').toLowerCase().includes(w1focus.toLowerCase().slice(0,12)))
     .map(q => `Q${q.number}: ${safeStr(q.questionText)} (${q.marksAwarded}/${q.marksAvailable})`)
