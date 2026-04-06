@@ -587,6 +587,10 @@ function setLoadingState(pageId, title, sub, current, total) {
       }).join('')
     : '';
 
+  const progressHtml = total > 1 ? `
+    <div class="page-progress">
+    </div>` : '';
+
   el.innerHTML = `
     <div class="loading-state" style="gap:0">
       <div style="width:64px;height:64px;margin-bottom:1.25rem;position:relative">
