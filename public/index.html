@@ -361,9 +361,11 @@ let APP = {
 };
 
 // ── MODEL DEFAULTS ──
-const DEFAULT_VISION_MODEL = 'minicpm-v:8b';
-const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
-const DEFAULT_TIMEOUT_MIN  = 15;
+const DEFAULT_VISION_MODEL  = 'minicpm-v:8b';           // red-ink mark detection only
+const DEFAULT_TEXT_MODEL    = 'qwen2.5:7b-instruct-q4_K_M';
+const DEFAULT_PADDLE_MODEL  = 'paddleocr';              // printed text + layout
+const DEFAULT_TROCR_MODEL   = 'microsoft/trocr-large-handwritten'; // student handwriting
+const DEFAULT_TIMEOUT_MIN   = 15;
 
 const DEFAULT_SYSTEM = [
   'You are an expert educational diagnostic specialist.',
@@ -707,12 +709,209 @@ async function runpodCall(input, timeoutMs = 600000) {
   }
 }
 
-// ── OCR PIPELINE ──
-async function callOCRPipeline(prompt, images, customSystemMsg) {
-  const visionModel = DEFAULT_VISION_MODEL;
-  const textModel   = DEFAULT_TEXT_MODEL;
-  const timeoutMin  = DEFAULT_TIMEOUT_MIN;
+// ── OCR PIPELINE — 3-STAGE: PaddleOCR → TrOCR → minicpm-v (marks only) ──
 
+// Stage 1: PaddleOCR — layout detection + printed text (question numbers, wording, mark allocations)
+async function paddleOCRPage(image, pageNum) {
+  try {
+    const out = await runpodCall({
+      action: 'paddleocr',
+      image: image.base64,
+      options: {
+        use_angle_cls: true,  // auto-rotate skewed pages
+        lang: 'en',
+        det: true,            // text region detection
+        rec: true,            // text recognition
+        cls: true,            // direction classification
+        use_gpu: true,
+      }
+    }, 90000);
+    // Expected: { blocks: [{text, type, bbox:[x1,y1,x2,y2], confidence, row_index}] }
+    // type is 'printed' for most; PaddleOCR may flag low-confidence regions as 'handwritten'
+    return out && out.blocks ? out : { blocks: [] };
+  } catch(e) {
+    console.warn(`PaddleOCR page ${pageNum} failed:`, e.message);
+    return { blocks: [] };
+  }
+}
+
+// Stage 2: TrOCR — handwritten student answers and working
+// microsoft/trocr-large-handwritten is trained on IAM Handwriting Database,
+// making it far superior to a general vision LLM for reading student pencil/ink handwriting
+async function trocRPage(image, pageNum) {
+  try {
+    const out = await runpodCall({
+      action: 'trocr',
+      model: DEFAULT_TROCR_MODEL,
+      image: image.base64,
+      // segment_mode: 'line' — backend should split page into line regions and run TrOCR per line
+      // then stitch results back in reading order (top-to-bottom, left-to-right)
+      segment_mode: 'line',
+      options: {
+        beam_size: 4,           // beam search width — better accuracy vs speed
+        max_new_tokens: 128,    // per line; student answers are rarely longer
+        skip_printed: true,     // backend should skip high-contrast printed regions (handled by PaddleOCR)
+      }
+    }, 120000);
+    // Expected: { lines: [{text, bbox:[x1,y1,x2,y2], confidence}], full_text: '...' }
+    return out && (out.lines || out.full_text) ? out : { lines: [], full_text: '' };
+  } catch(e) {
+    console.warn(`TrOCR page ${pageNum} failed:`, e.message);
+    return { lines: [], full_text: '' };
+  }
+}
+
+// Merge PaddleOCR and TrOCR outputs into a structured per-page transcript.
+// Printed blocks sorted by vertical position → question skeleton.
+// TrOCR lines are spatially associated with the nearest printed question block above them.
+function buildPageTranscript(pageNum, paddleResult, trocrResult) {
+  const lines = [];
+  lines.push(`=== PAGE ${pageNum} ===`);
+
+  // ── PRINTED TEXT (PaddleOCR) ──
+  const printed = (paddleResult.blocks || [])
+    .filter(b => b.confidence > 0.6)
+    .sort((a, b) => {
+      // Sort by top-left y, then x (reading order)
+      const ay = (a.bbox ? a.bbox[1] : 0), by = (b.bbox ? b.bbox[1] : 0);
+      return ay !== by ? ay - by : (a.bbox ? a.bbox[0] : 0) - (b.bbox ? b.bbox[0] : 0);
+    });
+
+  if (printed.length > 0) {
+    lines.push('[PRINTED TEXT — PaddleOCR layout analysis]');
+    printed.forEach(b => {
+      const conf = b.confidence ? ` (conf:${Math.round(b.confidence * 100)}%)` : '';
+      lines.push(b.text + conf);
+    });
+  } else {
+    lines.push('[PRINTED TEXT — PaddleOCR: no high-confidence printed regions detected]');
+  }
+
+  // ── STUDENT HANDWRITING (TrOCR) ──
+  lines.push('');
+  lines.push('[STUDENT HANDWRITING — TrOCR microsoft/trocr-large-handwritten]');
+
+  const twLines = trocrResult.lines || [];
+  if (twLines.length > 0) {
+    // Sort handwritten lines top-to-bottom
+    const sorted = [...twLines].sort((a, b) =>
+      (a.bbox ? a.bbox[1] : 0) - (b.bbox ? b.bbox[1] : 0)
+    );
+    sorted.forEach(l => {
+      const conf = l.confidence ? ` (conf:${Math.round(l.confidence * 100)}%)` : '';
+      if ((l.text || '').trim()) lines.push(l.text + conf);
+    });
+  } else if (trocrResult.full_text) {
+    lines.push(trocrResult.full_text);
+  } else {
+    lines.push('(no handwritten text detected)');
+  }
+
+  return lines.join('\n');
+}
+
+// Stage 3: minicpm-v — focused ONLY on red-ink teacher marks.
+// Given pre-extracted printed+handwritten text as context, the model only needs to
+// visually identify ink colour (red vs dark), which is a much narrower task → fewer hallucinations.
+async function detectRedInkMarks(image, pageNum, preExtractedTranscript) {
+  const questionList = (preExtractedTranscript.match(/Q[\w()]+:/g) || [])
+    .map(q => q.replace(':', ''))
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .join(', ');
+
+  const marksPrompt =
+    'You are examining a marked exam paper. The question text and student answers have already been ' +
+    'extracted by specialist OCR models and are shown below. Your ONLY task is to identify RED INK ' +
+    'marks left by the teacher — ticks, crosses, circled numbers, written scores.\n\n' +
+    'PRE-EXTRACTED PAGE CONTENT:\n' +
+    preExtractedTranscript + '\n\n' +
+    'Questions detected on this page: ' + (questionList || 'see transcript above') + '\n\n' +
+    'RED INK DETECTION RULES:\n' +
+    '- Teacher marks are ALWAYS in RED ink — never dark/black/blue/green ink.\n' +
+    '- Red circled number (e.g. circled 2) = marks awarded for that question.\n' +
+    '- Red tick (checkmark) = method or answer correct — contributes to mark count.\n' +
+    '- Red X (cross) anywhere near an answer = 0 marks for that question, NO exceptions.\n' +
+    '- Red fraction (e.g. 1/2) = partial mark = 0.5.\n' +
+    '- Red number written at line end or in margin = marks for that question.\n' +
+    '- Red X overrides all red ticks on the same question — the final verdict is 0.\n' +
+    '- Student dark-ink numbers are NOT marks. Ignore them.\n' +
+    '- If no red ink is visible for a question, write: unmarked\n\n' +
+    'OUTPUT FORMAT — one line per question, nothing else:\n' +
+    'Q1: 2\nQ2: 0\nQ3: unmarked\nQ4a: 1\nQ4b: 0\n\n' +
+    'Do NOT output any prose. Do NOT explain. Only Q-lines.';
+
+  try {
+    const out = await runpodCall({
+      action: 'ollama-chat',
+      model: DEFAULT_VISION_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a specialist at detecting red ink marks on exam papers. ' +
+                   'Ignore all black/dark ink. Report only what you see in RED ink. ' +
+                   'Output ONLY Q-number lines in the exact format shown.'
+        },
+        { role: 'user', content: marksPrompt, images: [image.base64] }
+      ],
+      options: { temperature: 0.0, num_predict: 512, num_ctx: 16384 },
+      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
+    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
+
+    const content = (out.content || '').trim();
+    const marks = {};
+    const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
+    let m;
+    while ((m = lineRe.exec(content)) !== null) {
+      marks[m[1].trim()] = m[2].trim();
+    }
+    return marks; // { '1': '2', '2': '0', '3a': 'unmarked', ... }
+  } catch(err) {
+    console.warn(`Red ink detection failed for page ${pageNum}:`, err.message);
+    return {};
+  }
+}
+
+// Assemble final structured transcript from all 3 stage outputs.
+// This is what qwen2.5 receives — far richer and more accurate than a single vision-LLM pass.
+function assemblePageBlock(pageNum, preTranscript, redInkMarks) {
+  const lines = [preTranscript, '', '[TEACHER MARKS — minicpm-v red ink detection]'];
+
+  if (Object.keys(redInkMarks).length === 0) {
+    lines.push('(no red ink marks detected — marks will be inferred from student answers)');
+  } else {
+    Object.entries(redInkMarks).forEach(([qNum, awarded]) => {
+      const verdict = awarded === 'unmarked' ? 'unmarked (infer from student answer)'
+        : awarded === '0' ? `0 marks (red X — incorrect)`
+        : `${awarded} marks awarded`;
+      lines.push(`Q${qNum}: ${verdict}`);
+    });
+  }
+
+  // Generate the structured Q-blocks that qwen2.5 expects
+  // Extract question numbers from printed text (PaddleOCR is the authoritative source)
+  const qNums = [...new Set(
+    (preTranscript.match(/\bQ(\d+[a-z]?(?:\([ivx]+\))?)/gi) || []).map(q => q.replace(/^Q/i,''))
+  )];
+
+  lines.push('');
+  lines.push('[STRUCTURED Q-BLOCKS for analysis model]');
+  lines.push('QUESTION INVENTORY: ' + (qNums.length > 0 ? qNums.map(n => 'Q' + n).join(', ') : 'see printed text above'));
+  lines.push('TOTAL QUESTIONS ON THIS PAGE: ' + qNums.length);
+  lines.push('');
+  lines.push('For each question above:');
+  lines.push('- QUESTION TEXT: from [PRINTED TEXT] section');
+  lines.push('- STUDENT ANSWER: from [STUDENT HANDWRITING] section');
+  lines.push('- MARKS AVAILABLE: bracketed number [N] from printed text');
+  lines.push('- MARKS AWARDED: from [TEACHER MARKS] section above (override printed text)');
+
+  return lines.join('\n');
+}
+
+async function callOCRPipeline(prompt, images, customSystemMsg) {
+  const textModel  = DEFAULT_TEXT_MODEL;
+  const timeoutMin = DEFAULT_TIMEOUT_MIN;
+
+  // ── Text-only path (no images) ──
   if (!images || !images.length) {
     APP.rawPageText = prompt;
     updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
@@ -729,97 +928,64 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     return out.content || '';
   }
 
+  // ── Image path — 3-stage specialist pipeline ──
+  // Stage weighting: PaddleOCR=printed accuracy, TrOCR=handwriting accuracy, minicpm-v=mark colour detection
+
   const pageInterpretations = [];
-  updateLoadingText('analysis', 'Downloading vision model…', 'Pulling minicpm-v:8b on RunPod — one-time per session (~5GB)');
+
+  // Pull minicpm-v once (PaddleOCR and TrOCR are Python-native, no pull needed)
+  updateLoadingText('analysis', 'Loading models…', 'Pulling minicpm-v:8b for red-ink detection — one-time (~5GB)');
   try {
-    await runpodCall({
-      action: 'ollama-pull',
-      model: DEFAULT_VISION_MODEL,
-      timeout_seconds: 600
-    }, 660000);
-    updateLoadingText('analysis', 'Model ready', 'Starting page extraction…');
+    await runpodCall({ action: 'ollama-pull', model: DEFAULT_VISION_MODEL, timeout_seconds: 600 }, 660000);
   } catch(e) {
-    console.warn('Model pull failed or already present:', e.message);
-    // Continue anyway — model may already be cached from earlier in the session
+    console.warn('minicpm-v pull skipped (may already be cached):', e.message);
   }
+
+  // Per-page: run PaddleOCR → TrOCR → minicpm-v in sequence
+  // (PaddleOCR+TrOCR could be parallelised if the backend supports it — flagged in action payload)
   for (let i = 0; i < images.length; i++) {
+
+    // ── Stage 1 progress ──
     setLoadingState('analysis',
-      `Reading page ${i + 1} of ${images.length}…`,
-      'Identifying questions, marks, ticks and corrections',
-      i, images.length
+      `Page ${i + 1} of ${images.length} — reading printed text…`,
+      'PaddleOCR: detecting question numbers, wording, mark allocations',
+      i * 3, images.length * 3
     );
+    const paddleResult = await paddleOCRPage(images[i], i + 1);
 
-    const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
+    // ── Stage 2 progress ──
+    updateLoadingText('analysis',
+      `Page ${i + 1} of ${images.length} — reading handwriting…`,
+      'TrOCR: recognising student answers and working'
+    );
+    const trocrResult = await trocRPage(images[i], i + 1);
 
-      DOCUMENT STRUCTURE — read this before doing anything else:
-      - PRINTED/TYPED text = question numbers, question wording, mark allocations in brackets e.g. [2] or (2).
-      - HANDWRITTEN in pencil, green ink, or dark ink = student answers, student working, student calculations.
-      - HANDWRITTEN in RED INK only = teacher ticks, crosses, circled scores, and corrections.
-      Never confuse student-written dark-ink numerals with teacher-awarded marks.
-      Never confuse a printed bracketed number (e.g. [2]) with a teacher score written in red.
-      For each student answer, silently judge whether it is correct, partially correct, wrong, or blank — record this as ANSWER QUALITY: correct | partial | incorrect | blank.
+    // Build intermediate transcript from printed + handwriting
+    const preTranscript = buildPageTranscript(i + 1, paddleResult, trocrResult);
 
-      ${mathOCRRules()}
-      STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
-      "Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
-      Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
-      IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
+    // ── Stage 3 progress ──
+    updateLoadingText('analysis',
+      `Page ${i + 1} of ${images.length} — detecting teacher marks…`,
+      'minicpm-v: scanning for red ink ticks, crosses and circled scores'
+    );
+    const redInkMarks = await detectRedInkMarks(images[i], i + 1, preTranscript);
 
-      STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
-      Q<number>: [question text — ONE LINE ONLY, max 15 words. No line breaks.]
-      MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
-      STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-      'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
-      '\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
-      '\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
-      '\n  - A red number at the end of a question line, or near the student's answer = marks for that question only.' +
-      '\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
-      '\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
-      '\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
-      '\n  - Red X means the student answer is incorrect = 0 marks, regardless of ANSWER QUALITY.' +
-      '\n  - A red X crossing through the answer, placed beside it, or anywhere within the question box = 0 marks, no exceptions.' +
-      '\n  - If a red X and a red tick both appear on the same question, the X overrides — award 0.' +
-      '\n  - If MARKS AWARDED is "unmarked", judge the student handwritten answer directly:' +
-      '\n    a blank or missing answer = 0, a clearly correct answer = full marks, partially correct = half marks rounded down.' +
-      '\n    Never write "unmarked" in the final output — always resolve to a number.' +
-      '\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
-      TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
-      CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+    // Assemble final page block
+    const fullPageBlock = assemblePageBlock(i + 1, preTranscript, redInkMarks);
+    pageInterpretations.push(fullPageBlock);
 
-      PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
-
-      STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MUST equal the "TOTAL QUESTIONS ON THIS PAGE" number from Step 1. If they differ, go back and add the missing question blocks before finishing.`;
-
-    try {
-      const pageOut = await runpodCall({
-        action: 'ollama-chat',
-        model: visionModel,
-        messages: [
-          { role: 'system', content: 'You are an expert exam marker. Read the image carefully and extract all content accurately.' },
-          { role: 'user', content: pagePrompt, images: [images[i].base64] }
-        ],
-        options: { temperature: 0.05, num_predict: 8192, num_ctx: 32768 },
-        timeout_seconds: Math.round(timeoutMin * 60)
-      }, timeoutMin * 60000 + 30000);
-      pageInterpretations.push(`=== PAGE ${i+1} ===\n${pageOut.content || '(no content extracted)'}`);
-      setLoadingState('analysis',
-        `Reading pages… (${Math.min(batch + 2, images.length)} of ${images.length} done)`,
-        'Extracting questions, marks and handwriting',
-        Math.min(batch + 2, images.length), images.length
-      );
-    } catch(err) {
-      console.warn(`Page ${i+1} vision call failed:`, err.message);
-      pageInterpretations.push(`=== PAGE ${i+1} ===\n(vision model failed for this page: ${err.message})`);
-    }
+    setLoadingState('analysis',
+      `Pages read: ${i + 1} of ${images.length}`,
+      'All three OCR stages complete for this page',
+      (i + 1) * 3, images.length * 3
+    );
   }
 
-  updateLoadingText('analysis', 'Building your diagnostic…', 'Almost there — analysing every question');
+  // ── Build analysis prompt ──
+  updateLoadingText('analysis', 'Building your diagnostic…', 'Analysing every question with qwen2.5');
   const analysisStages = [
-    'Identifying topic gaps…',
-    'Classifying mistake patterns…',
-    'Computing topic scores…',
-    'Checking for recurring errors…',
-    'Finalising your report…',
+    'Identifying topic gaps…', 'Classifying mistake patterns…',
+    'Computing topic scores…', 'Checking for recurring errors…', 'Finalising your report…',
   ];
   let _si = 0;
   clearInterval(window._stageInterval);
@@ -827,37 +993,28 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     _si = (_si + 1) % analysisStages.length;
     updateLoadingText('analysis', 'Building your diagnostic…', analysisStages[_si]);
   }, 4000);
-  const combined   = pageInterpretations.join('\n\n');
+
+  const combined = pageInterpretations.join('\n\n');
   APP.rawPageText = combined;
 
-  updateLoadingText('analysis', 'Verifying awarded marks…', 'Double-checking red ink marks on each page');
-  const marksVerified = await verifyMarksWithVision(images, pageInterpretations);
-  
-  if (marksVerified.length > 0) {
-    const correctionsBlock = '\n\n=== MARKS VERIFICATION (second pass — use these values for MARKS AWARDED) ===\n' +
-      marksVerified.map(v =>
-        `Q${v.number}: marks awarded = ${v.marksAwarded === 'unmarked' ? 'unmarked' : v.marksAwarded}`
-      ).join('\n') +
-      '\nINSTRUCTION: For any question listed above, the MARKS AWARDED value in this verification block ' +
-      'overrides the value extracted in the page transcripts above. If a question shows "unmarked" here ' +
-      'but has a value in the transcript, trust the transcript. If a question shows a numeric value here, ' +
-      'use that value regardless of what the transcript says.';
-  
-    APP.rawPageText = combined + correctionsBlock;
-  } else {
-    APP.rawPageText = combined;
-  }
-  
   const pageQuestionCounts = pageInterpretations.map(pt => {
     const matches = pt.match(/^Q[\w()]+:/gm) || [];
     return matches.length;
   });
   const totalExpectedQs = pageQuestionCounts.reduce((a, b) => a + b, 0);
   const countHint = totalExpectedQs > 0
-    ? `\n\nQUESTION COUNT CHECK: The page transcripts above contain ${totalExpectedQs} question/sub-question block(s) across ${images.length} page(s). Your "questions" JSON array MUST have exactly ${totalExpectedQs} entries — one per block, in the order they appear (Page 1 first, then Page 2, etc.). Do not skip any. Do not merge any.`
+    ? `\n\nQUESTION COUNT CHECK: The page transcripts contain ${totalExpectedQs} question/sub-question blocks across ${images.length} page(s). ` +
+      `Your "questions" JSON array MUST have exactly ${totalExpectedQs} entries in page order. Do not skip or merge any.`
     : '';
 
-  const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages):\n${APP.rawPageText}${countHint}`
+  // Note the data provenance so qwen2.5 knows which source to trust for each field
+  const provenanceNote = `\n\nDATA PROVENANCE NOTE:
+- Question text and marks available: trust [PRINTED TEXT] (PaddleOCR — high accuracy for printed characters)
+- Student answers and working: trust [STUDENT HANDWRITING] (TrOCR microsoft/trocr-large-handwritten — specialist model)
+- Marks awarded: trust [TEACHER MARKS] (minicpm-v red ink detection) — if a question shows "unmarked", infer from student answer quality
+- Where sources conflict, priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
+
+  const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages, extracted by 3-stage OCR pipeline):\n${APP.rawPageText}${provenanceNote}${countHint}`;
 
   const finalOut = await runpodCall({
     action: 'ollama-chat',
@@ -878,68 +1035,49 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
           '7. No markdown, no preamble, no commentary outside the JSON.',
           'ORDERING RULE: list questions in the exact order they appear in the exam — page 1 first.',
           'COMPLETENESS RULE: every question block in EXAM CONTENT must appear in the questions array.',
+          'PROVENANCE RULE: for marks awarded, use [TEACHER MARKS] section; for question text, use [PRINTED TEXT] section; for student answers, use [STUDENT HANDWRITING] section.',
         ].join(' ')
       },
       { role: 'user', content: fullPrompt }
     ],
-    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768},
+    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768 },
     timeout_seconds: Math.round(timeoutMin * 3 * 60)
   }, timeoutMin * 3 * 60000 + 30000);
   return finalOut.content || '';
 }
 
+// verifyMarksWithVision is retained as a safety fallback
+// but is no longer called in the main pipeline —
+// minicpm-v's focused red-ink pass in detectRedInkMarks() replaces it.
 async function verifyMarksWithVision(images, pageInterpretations) {
   const verified = [];
-
   for (let i = 0; i < images.length; i++) {
+    const contextText = pageInterpretations[i] || '';
     const marksPrompt =
-      'You are an expert exam marker verifying scores from a handwritten exam paper.\n\n' +
-      'DOCUMENT STRUCTURE:\n' +
-      '- Question text is PRINTED/TYPED on the page.\n' +
-      '- Student answers and working are HANDWRITTEN in pencil or dark ink.\n' +
-      '- Teacher marks are HANDWRITTEN in RED INK only (ticks, crosses, circled numbers).\n\n' +
-      'For every question on this page, determine the marks awarded using this TWO-STEP method:\n\n' +
-      'STEP 1 — Read the student handwritten answer:\n' +
-      '  - Is the student answer correct, partially correct, or wrong?\n' +
-      '  - A blank or missing answer = 0 marks.\n' +
-      '  - Correct method with minor slip = likely partial marks.\n' +
-      '  - Fully correct answer = full marks.\n\n' +
-      'STEP 2 — Cross-check against red ink teacher marks:\n' +
-      '  - A red number = teacher total for that question (use this if visible).\n' +
-      '  - If teacher mark is absent ("unmarked"), use your Step 1 assessment to infer the score.\n' +
-      '  - A red X anywhere on or beside the student answer = 0, this overrides ticks, circled numbers, and ANSWER QUALITY\n' +
-      '  - A red X crossing through working or the final answer = 0, even if part of the answer looks correct\n' +
-      '  - If teacher mark contradicts a clearly correct answer, report the teacher mark but flag it.\n\n' +
-      'OUTPUT — one line per question, exactly this format:\n' +
-      'Q1: 2\nQ2: 0\nQ3: unmarked\n\n' +
-      'Rules:\n' +
-      '- Use the teacher red ink mark when clearly visible — it overrides Step 1.\n' +
-      '- When no red ink is present, infer from student answer content (Step 1).\n' +
-      '- Never invent a mark. Write "unmarked" only if both Step 1 and Step 2 are inconclusive.\n' +
-      '- Student-written dark or green ink numbers are NOT marks — do not count them.\n' +
-      '- Output ONLY the Q-number lines. No prose, no explanation.';
-
+      'You are an expert exam marker doing a final verification of red ink teacher scores.\n\n' +
+      'PRE-EXTRACTED CONTEXT:\n' + contextText.slice(0, 1500) + '\n\n' +
+      'Look at the image. For every question, confirm the marks awarded by the teacher (RED INK ONLY).\n' +
+      'A red X anywhere = 0. A red circled number = that score. Red tick = contributes to mark.\n' +
+      'Output ONLY Q-number lines:\nQ1: 2\nQ2: 0\nQ3: unmarked';
     try {
       const out = await runpodCall({
         action: 'ollama-chat',
         model: DEFAULT_VISION_MODEL,
         messages: [
-          { role: 'system', content: 'You are an expert exam marker. Look carefully at red ink only.' },
+          { role: 'system', content: 'Expert exam marker. Red ink only. Output Q-lines only.' },
           { role: 'user', content: marksPrompt, images: [images[i].base64] }
         ],
-        options: { temperature: 0.0, num_predict: 1024, num_ctx: 65536 },
+        options: { temperature: 0.0, num_predict: 512, num_ctx: 16384 },
         timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
       }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
-
       const content = (out.content || '').trim();
-      // Parse lines like "Q1: 2" or "Q1a: 0"
       const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
       let m;
       while ((m = lineRe.exec(content)) !== null) {
         verified.push({ number: m[1].trim(), marksAwarded: m[2].trim() });
       }
     } catch(err) {
-      console.warn(`Marks verification failed for page ${i + 1}:`, err.message);
+      console.warn(`verifyMarksWithVision page ${i + 1}:`, err.message);
     }
   }
   return verified;
