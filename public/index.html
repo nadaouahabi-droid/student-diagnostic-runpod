@@ -1098,9 +1098,8 @@ function normalizeAnalysis(d) {
       ...q,
       number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
       marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded: q.redX === true ? 0 : (String(q.marksAwarded||'').toLowerCase()==='unmarked' ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0),
-      questionText:q.questionText && q.questionText.trim() && q.questionText.trim().toLowerCase()!=='blank' ? q.questionText.trim() : '(Q'+String(q.number)+' — '+( q.topic||'see exam')+')',
-      topic:q.topic||'Unknown',
+      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
+      questionText:q.questionText||'',topic:q.topic||'Unknown',
       _origIdx: idx
     }));
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
