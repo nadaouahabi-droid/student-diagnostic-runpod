@@ -1098,7 +1098,7 @@ function normalizeAnalysis(d) {
       ...q,
       number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
       marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded: q.redX === true ? 0 : (String(q.marksAwarded||'').toLowerCase()==='unmarked' ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0),
+      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
       questionText:q.questionText||'',topic:q.topic||'Unknown',
       _origIdx: idx
     }));
