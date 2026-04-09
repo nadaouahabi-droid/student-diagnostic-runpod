@@ -757,7 +757,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       Q<number>: [exact question text as printed/written]
       MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
       STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-      ANSWER QUALITY: [your independent judgment of the student answer — correct | partial | incorrect | blank — based on the content of the handwriting, ignoring teacher marks entirely]
       'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
       '\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
       '\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
@@ -768,7 +767,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       '\n  - Red X means the student answer is incorrect = 0 marks, regardless of ANSWER QUALITY.' +
       '\n  - A red X crossing through the answer, placed beside it, or anywhere within the question box = 0 marks, no exceptions.' +
       '\n  - If a red X and a red tick both appear on the same question, the X overrides — award 0.' +
-      '\n  - If MARKS AWARDED is "unmarked", use ANSWER QUALITY to infer: correct = full marks, partial = half marks (round down), incorrect/blank = 0.' +
+      '\n  - If MARKS AWARDED is "unmarked", judge the student handwritten answer directly:' +
+      '\n    a blank or missing answer = 0, a clearly correct answer = full marks, partially correct = half marks rounded down.' +
+      '\n    Never write "unmarked" in the final output — always resolve to a number.' +
       '\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
       TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
       CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
@@ -1097,7 +1098,7 @@ function normalizeAnalysis(d) {
       ...q,
       number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
       marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded: q.redX === true ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
+      marksAwarded: q.redX === true ? 0 : (String(q.marksAwarded||'').toLowerCase()==='unmarked' ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0),
       questionText:q.questionText||'',topic:q.topic||'Unknown',
       _origIdx: idx
     }));
