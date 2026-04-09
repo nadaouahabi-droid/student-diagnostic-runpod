@@ -754,7 +754,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
 
       STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
-      Q<number>: [exact question text as printed/written]
+      Q<number>: [question text — ONE LINE ONLY, max 15 words. No line breaks.]
       MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
       STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
       'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
@@ -1098,8 +1098,9 @@ function normalizeAnalysis(d) {
       ...q,
       number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
       marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
-      questionText:q.questionText||'',topic:q.topic||'Unknown',
+      marksAwarded: q.redX === true ? 0 : (String(q.marksAwarded||'').toLowerCase()==='unmarked' ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0),
+      questionText:q.questionText && q.questionText.trim() && q.questionText.trim().toLowerCase()!=='blank' ? q.questionText.trim() : '(Q'+String(q.number)+' — '+( q.topic||'see exam')+')',
+      topic:q.topic||'Unknown',
       _origIdx: idx
     }));
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
@@ -1370,7 +1371,7 @@ RULES FOR questions array:
 - number: STRING — exact label from the exam e.g. "1", "2", "1a", "1b", "2c" (no spaces, no leading "Q")
 - Sub-sub-questions: "1a(i)", "1a(ii)" — keep parens as-is
 - If question 1 has sub-parts (a), (b), list each SEPARATELY: "1a", "1b" — do NOT merge
-- questionText: a brief (max 15 words) description of what the question asks — taken directly from the exam — NO double-quote chars, ASCII only
+'- questionText: REQUIRED — a brief (max 15 words) description on a SINGLE LINE — if you cannot read the question text write the topic name instead — NEVER leave empty, NEVER write "blank", NO double-quote chars, ASCII only'
 - Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
 - marksAvailable / marksAwarded: numeric
 
