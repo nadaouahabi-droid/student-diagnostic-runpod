@@ -765,7 +765,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       '\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
       '\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
       '\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
-      '\n  - Red X means the student answer is incorrect = 0 marks.' +
+      '\n  - Red X means the student answer is incorrect = 0 marks, regardless of ANSWER QUALITY.' +
+      '\n  - A red X crossing through the answer, placed beside it, or anywhere within the question box = 0 marks, no exceptions.' +
+      '\n  - If a red X and a red tick both appear on the same question, the X overrides — award 0.' +
       '\n  - If MARKS AWARDED is "unmarked", use ANSWER QUALITY to infer: correct = full marks, partial = half marks (round down), incorrect/blank = 0.' +
       '\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
       TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
@@ -892,6 +894,8 @@ async function verifyMarksWithVision(images, pageInterpretations) {
       'STEP 2 — Cross-check against red ink teacher marks:\n' +
       '  - A red number = teacher total for that question (use this if visible).\n' +
       '  - If teacher mark is absent ("unmarked"), use your Step 1 assessment to infer the score.\n' +
+      '  - A red X anywhere on or beside the student answer = 0, this overrides ticks, circled numbers, and ANSWER QUALITY\n' +
+      '  - A red X crossing through working or the final answer = 0, even if part of the answer looks correct\n' +
       '  - If teacher mark contradicts a clearly correct answer, report the teacher mark but flag it.\n\n' +
       'OUTPUT — one line per question, exactly this format:\n' +
       'Q1: 2\nQ2: 0\nQ3: unmarked\n\n' +
@@ -1089,15 +1093,19 @@ function normalizeAnalysis(d) {
   d.marksObtained=parseFloat(String(d.marksObtained).replace(/[^\d.]/g,''))||0;
   d.totalMarks=parseFloat(String(d.totalMarks).replace(/[^\d.]/g,''))||0;
   if(Array.isArray(d.questions)&&d.questions.length>0){
-    d.questions=d.questions.map((q,idx)=>({
-      ...q,
-      number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
-      marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
-      questionText:q.questionText||'',topic:q.topic||'Unknown',
-      _origIdx: idx
-    }));
-
+    d.questions=d.questions.map((q,idx)=>{
+      const marksAwarded = parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0;
+      const redX = !!(q.redX || q.teacherNote && /\bX\b|crossed|incorrect/i.test(q.teacherNote));
+      return {
+        ...q,
+        number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
+        marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
+        marksAwarded: redX ? 0 : marksAwarded,
+        questionText:q.questionText||'',topic:q.topic||'Unknown',
+        redX,
+        _origIdx: idx
+      };
+    });
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
