@@ -738,31 +738,42 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     );
 
     const pagePrompt = `You are an experienced ${isMath() ? 'mathematics' : ''} exam marker performing OCR directly from the image. Analyse page ${i+1} of ${images.length}.
-${mathOCRRules()}
-STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
-"Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
-Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
-IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
 
-STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
-Q<number>: [exact question text as printed/written]
-MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
-STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
-'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
-'\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
-'\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
-'\n  - A red number at the end of a question line, or positioned after the current question and before the next one = marks for that question only.' +
-'\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
-'\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
-'\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
-'\n  - Red X means the student answer is incorrect = 0 marks.' +
-'\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
-TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
-CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+      DOCUMENT STRUCTURE — read this before doing anything else:
+      - PRINTED/TYPED text = question numbers, question wording, mark allocations in brackets e.g. [2] or (2).
+      - HANDWRITTEN in pencil, green ink, or dark ink = student answers, student working, student calculations.
+      - HANDWRITTEN in RED INK only = teacher ticks, crosses, circled scores, and corrections.
+      Never confuse student-written dark-ink numerals with teacher-awarded marks.
+      Never confuse a printed bracketed number (e.g. [2]) with a teacher score written in red.
+      For each student answer, silently judge whether it is correct, partially correct, wrong, or blank — record this as ANSWER QUALITY: correct | partial | incorrect | blank.
 
-PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
+      ${mathOCRRules()}
+      STEP 1 — QUESTION INVENTORY: Scan the entire page methodically from top to bottom, left to right. List EVERY question number and sub-part label you can see — including ones where the student left a blank answer. Write them as a comma-separated list, e.g.:
+      "Questions on this page: Q1, Q2a, Q2b, Q2c, Q3, Q4a, Q4b"
+      Then write: "TOTAL QUESTIONS ON THIS PAGE: N" (replace N with the actual count).
+      IMPORTANT: Only list question numbers you can clearly and unambiguously see printed or written on the page. If you are not certain a question number exists, do not include it. Never invent, infer, or guess question numbers.
 
-STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MUST equal the "TOTAL QUESTIONS ON THIS PAGE" number from Step 1. If they differ, go back and add the missing question blocks before finishing.`;
+      STEP 2 — For each question or sub-question from Step 1 IN ORDER, produce this exact block (use the question number/label from Step 1 exactly):
+      Q<number>: [exact question text as printed/written]
+      MARKS AVAILABLE: [marks allocated — look for a number in square brackets or parentheses written in black ink at end of question line or right margin (e.g. [2], [3 marks], (2)). Also check the end of answer fields. Write the numeric value only e.g. 2. If truly absent write 0]
+      STUDENT ANSWER: [full handwritten working + answer verbatim — include every step, even crossed-out work. Write "(blank)" if no answer.]
+      ANSWER QUALITY: [your independent judgment of the student answer — correct | partial | incorrect | blank — based on the content of the handwriting, ignoring teacher marks entirely]
+      'MARKS AWARDED: [CRITICAL — only count RED INK marks made by the teacher:' +
+      '\n  - A red circled or boxed number (e.g. circled 2) = total marks for that question.' +
+      '\n  - Red fraction e.g. 1/2 written in red = 0.5 marks.' +
+      '\n  - A red number at the end of a question line, or positioned after the current question and before the next one = marks for that question only.' +
+      '\n  - The digit "1" may be handwritten and resemble a capital "I"; interpret both as 1 when written in red ink.' +
+      '\n  - If NO red ink is visible anywhere near this question write "unmarked".' +
+      '\n  - DO NOT count student-written numbers as marks. Only teacher red ink counts.' +
+      '\n  - Red X means the student answer is incorrect = 0 marks.' +
+      '\n  - If MARKS AWARDED is "unmarked", use ANSWER QUALITY to infer: correct = full marks, partial = half marks (round down), incorrect/blank = 0.' +
+      '\n  Write a single numeric value only e.g. 2 or 0.5. Never write a range.]'
+      TEACHER NOTE: [corrections or comments written in RED ink, or "none"]
+      CROSSED OUT: [deleted text] REPLACED BY: [replacement text, or "none"]
+
+      PAGE TOTAL: [score shown at bottom or margin of page, or "not shown"]
+
+      STEP 3 — VERIFICATION: Count the Step 2 blocks you have written. This count MUST equal the "TOTAL QUESTIONS ON THIS PAGE" number from Step 1. If they differ, go back and add the missing question blocks before finishing.`;
 
     try {
       const pageOut = await runpodCall({
@@ -867,19 +878,29 @@ async function verifyMarksWithVision(images, pageInterpretations) {
 
   for (let i = 0; i < images.length; i++) {
     const marksPrompt =
-      'You are checking ONLY the marks awarded by the teacher on this exam page.\n' +
-      'The teacher marks EXCLUSIVELY in RED INK.\n\n' +
-      'For every question number visible on this page, report:\n' +
-      'Q<number>: <marks awarded as a number, or "unmarked" if no red ink present>\n\n' +
+      'You are an expert exam marker verifying scores from a handwritten exam paper.\n\n' +
+      'DOCUMENT STRUCTURE:\n' +
+      '- Question text is PRINTED/TYPED on the page.\n' +
+      '- Student answers and working are HANDWRITTEN in pencil or dark ink.\n' +
+      '- Teacher marks are HANDWRITTEN in RED INK only (ticks, crosses, circled numbers).\n\n' +
+      'For every question on this page, determine the marks awarded using this TWO-STEP method:\n\n' +
+      'STEP 1 — Read the student handwritten answer:\n' +
+      '  - Is the student answer correct, partially correct, or wrong?\n' +
+      '  - A blank or missing answer = 0 marks.\n' +
+      '  - Correct method with minor slip = likely partial marks.\n' +
+      '  - Fully correct answer = full marks.\n\n' +
+      'STEP 2 — Cross-check against red ink teacher marks:\n' +
+      '  - A red number = teacher total for that question (use this if visible).\n' +
+      '  - If teacher mark is absent ("unmarked"), use your Step 1 assessment to infer the score.\n' +
+      '  - If teacher mark contradicts a clearly correct answer, report the teacher mark but flag it.\n\n' +
+      'OUTPUT — one line per question, exactly this format:\n' +
+      'Q1: 2\nQ2: 0\nQ3: unmarked\n\n' +
       'Rules:\n' +
-      '- Count each red tick as 1 mark\n' +
-      '- A red circled or boxed number overrides the tick count — use that number\n' +
-      '- A red cross = 0\n' +
-      '- Student writing is NOT in red — ignore it\n' +
-      '- If you see no red ink at all for a question write "unmarked"\n' +
-      '- Do not guess. Only report what you can clearly see in red ink.\n\n' +
-      'Output ONLY lines in this exact format, one per question:\n' +
-      'Q1: 2\nQ2: 0\nQ3: unmarked\n...';
+      '- Use the teacher red ink mark when clearly visible — it overrides Step 1.\n' +
+      '- When no red ink is present, infer from student answer content (Step 1).\n' +
+      '- Never invent a mark. Write "unmarked" only if both Step 1 and Step 2 are inconclusive.\n' +
+      '- Student-written dark or green ink numbers are NOT marks — do not count them.\n' +
+      '- Output ONLY the Q-number lines. No prose, no explanation.';
 
     try {
       const out = await runpodCall({
@@ -1138,139 +1159,6 @@ function normalizeAnalysis(d) {
   return d;
 }
 
-// ── SCORE REFINEMENT ──
-// Second AI pass: uses raw OCR student-answer text to correct marksAwarded
-// where the vision model may have misread the teacher's red ink.
-// Returns the (possibly updated) analysis object. Non-fatal on any error.
-async function refineQuestionScores(analysis) {
-  if (!APP.rawPageText || !(analysis.questions || []).length) return analysis;
-
-  updateLoadingText('analysis', 'Refining question scores…', 'Verifying marks against student answers');
-
-  const qList = analysis.questions.map(q =>
-    'Q' + q.number + ': available=' + q.marksAvailable +
-    ', current=' + q.marksAwarded + ', topic=' + (q.topic || 'Unknown')
-  ).join('\n');
-
-  const questionContexts = [];
-  for (const q of analysis.questions) {
-    const marker = 'Q' + q.number + ':';
-    const markerAlt = 'Q' + q.number + ' ';
-    let idx = APP.rawPageText.indexOf(marker);
-    if (idx < 0) idx = APP.rawPageText.indexOf(markerAlt);
-    if (idx >= 0) {
-      questionContexts.push(APP.rawPageText.slice(idx, idx + 500));
-    }
-  }
-
-  const verifyIdx = APP.rawPageText.indexOf('=== MARKS VERIFICATION');
-  if (verifyIdx >= 0) {
-    questionContexts.push(APP.rawPageText.slice(verifyIdx));
-  }
-  
-  const ocrSnippet = questionContexts.join('\n---\n').slice(0, 18000);
-  const prompt = [
-    'You are an expert exam marker. Using the raw OCR transcript below, verify the marks awarded for each question.',
-    'Only correct a mark when the student answer visible in the transcript clearly contradicts the current value.',
-    'marksAwarded must be an integer between 0 and marksAvailable inclusive.',
-    '',
-    'RAW EXAM TRANSCRIPT:',
-    ocrSnippet,
-    '',
-    'CURRENT MARKS:',
-    qList,
-    '',
-    'STRICT JSON RULES:',
-    '1. Return ONLY a single valid JSON object - no markdown, no preamble.',
-    '2. Double quotes only. No trailing commas. No apostrophes.',
-    '3. No double-quote chars inside string values - use parentheses instead.',
-    '4. All string values pure ASCII under 60 characters.',
-    '5. If no corrections are needed return {"refinements":[]}',
-    '',
-    'Return this exact shape:',
-    '{"refinements":[{"number":"1","marksAwarded":2,"reason":"short reason under 60 chars"}]}'
-  ].join('\n');
-
-  try {
-    const raw = await runpodCall({
-      action: 'ollama-chat',
-      model: DEFAULT_TEXT_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You are an expert exam marker.',
-            'Return ONLY valid JSON. Double quotes only. No trailing commas. No markdown.',
-            'No double-quote characters inside string values.',
-            'All string values pure ASCII under 60 characters.'
-          ].join(' ')
-        },
-        { role: 'user', content: prompt }
-      ],
-      options: { temperature: 0.05, num_predict: 2048, num_ctx: 20000 },
-      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
-
-    const result = parseJSON(raw.content || '');
-    const refinements = Array.isArray(result.refinements) ? result.refinements : [];
-
-    if (!refinements.length) return analysis;
-
-    // Build lookup: question number -> refined marksAwarded
-    const refMap = {};
-    refinements.forEach(r => {
-      const key = String(r.number || '').replace(/^Q/i, '').trim();
-      const val  = parseInt(r.marksAwarded);
-      if (key && !isNaN(val)) refMap[key] = val;
-    });
-
-    // Apply refined values, clamped to [0, marksAvailable]
-    analysis.questions = analysis.questions.map(q => {
-      const key = String(q.number).trim();
-      if (!refMap.hasOwnProperty(key)) return q;
-      const refined = Math.min(q.marksAvailable, Math.max(0, refMap[key]));
-      return { ...q, marksAwarded: refined };
-    });
-
-    // Recompute totals
-    const totalAwarded = analysis.questions.reduce((s, q) => s + q.marksAwarded, 0);
-    analysis.marksObtained = totalAwarded;
-    const sc = analysis.totalMarks > 0 ? Math.round((totalAwarded / analysis.totalMarks) * 100) : 0;
-    analysis.overallScore  = Math.min(100, Math.max(0, sc));
-    analysis.grade = sc >= 75 ? 'A1' : sc >= 70 ? 'A2' : sc >= 65 ? 'B3' : sc >= 60 ? 'B4'
-                   : sc >= 55 ? 'C5' : sc >= 50 ? 'C6' : sc >= 45 ? 'D7' : sc >= 40 ? 'E8' : 'F9';
-
-    // Recompute topic performance
-    const topicMap = {};
-    analysis.questions.forEach(q => {
-      const t = q.topic || 'Unknown';
-      if (!topicMap[t]) topicMap[t] = { marksAvailable: 0, marksAwarded: 0, questionsAttempted: 0, mistakes: 0 };
-      topicMap[t].marksAvailable  += q.marksAvailable;
-      topicMap[t].marksAwarded    += q.marksAwarded;
-      if (q.marksAvailable > 0)    topicMap[t].questionsAttempted++;
-      if (q.marksAwarded < q.marksAvailable) topicMap[t].mistakes++;
-    });
-    analysis.topicPerformance = Object.entries(topicMap).map(([topic, v]) => {
-      const score = v.marksAvailable > 0 ? Math.round((v.marksAwarded / v.marksAvailable) * 100) : 0;
-      return {
-        topic, score,
-        level: score >= 70 ? 'strong' : score >= 50 ? 'developing' : 'weak',
-        questionsAttempted: v.questionsAttempted,
-        marksAvailable:     v.marksAvailable,
-        marksAwarded:       v.marksAwarded,
-        mistakes:           v.mistakes
-      };
-    });
-
-    console.log('Score refinement applied', refinements.length, 'change(s):', refMap);
-  } catch(e) {
-    // Refinement is best-effort — never blocks the main flow
-    console.warn('Score refinement skipped (non-fatal):', e.message);
-  }
-
-  return analysis;
-}
-
 // ── NAV / PAGE ──
 function goPage(p) {
   if (!APP.completedPages.has(p) && p !== 'input') return;
@@ -1492,7 +1380,6 @@ RULES FOR topicPerformance:
     const raw    = await callAI(prompt, hasVisual ? imgs : null, null);
     APP.analysis = normalizeAnalysis(parseJSON(raw));
     clearInterval(window._stageInterval);
-    APP.analysis = await refineQuestionScores(APP.analysis);
     renderAnalysis(APP.analysis);
   } catch(e) {
     document.getElementById('analysis-content').innerHTML = errCard('Analysis failed: ' + e.message);
@@ -2272,8 +2159,6 @@ function renderWorksheetResults(res, qs) {
 }
 
 // ── INIT ──
-function updateBadge() {}
-updateBadge();
 switchMode('image');
 </script>
 </body>
