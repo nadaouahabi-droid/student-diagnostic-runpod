@@ -361,7 +361,7 @@ let APP = {
 };
 
 // ── MODEL DEFAULTS ──
-const DEFAULT_VISION_MODEL = 'qwen2.5vl:7b-q4_K_M';
+const DEFAULT_VISION_MODEL = 'minicpm-v:8b';
 const DEFAULT_TEXT_MODEL   = 'qwen2.5:7b-instruct-q4_K_M';
 const DEFAULT_TIMEOUT_MIN  = 15;
 
@@ -730,6 +730,18 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   }
 
   const pageInterpretations = [];
+  updateLoadingText('analysis', 'Downloading vision model…', 'Pulling minicpm-v:8b on RunPod — one-time per session (~5GB)');
+  try {
+    await runpodCall({
+      action: 'ollama-pull',
+      model: DEFAULT_VISION_MODEL,
+      timeout_seconds: 600
+    }, 660000);
+    updateLoadingText('analysis', 'Model ready', 'Starting page extraction…');
+  } catch(e) {
+    console.warn('Model pull failed or already present:', e.message);
+    // Continue anyway — model may already be cached from earlier in the session
+  }
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Reading page ${i + 1} of ${images.length}…`,
