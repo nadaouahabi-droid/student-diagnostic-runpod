@@ -1093,19 +1093,14 @@ function normalizeAnalysis(d) {
   d.marksObtained=parseFloat(String(d.marksObtained).replace(/[^\d.]/g,''))||0;
   d.totalMarks=parseFloat(String(d.totalMarks).replace(/[^\d.]/g,''))||0;
   if(Array.isArray(d.questions)&&d.questions.length>0){
-    d.questions=d.questions.map((q,idx)=>{
-      const marksAwarded = parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0;
-      const redX = !!(q.redX || q.teacherNote && /\bX\b|crossed|incorrect/i.test(q.teacherNote));
-      return {
-        ...q,
-        number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
-        marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-        marksAwarded: redX ? 0 : marksAwarded,
-        questionText:q.questionText||'',topic:q.topic||'Unknown',
-        redX,
-        _origIdx: idx
-      };
-    });
+    d.questions=d.questions.map((q,idx)=>({
+      ...q,
+      number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
+      marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
+      marksAwarded: q.redX === true ? 0 : parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
+      questionText:q.questionText||'',topic:q.topic||'Unknown',
+      _origIdx: idx
+    }));
     const _romanIdx={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10};
     function _parseQ(num){const m=String(num).match(/^(\d+)(?:\(([a-zA-Z])\)|([a-zA-Z]+))?(?:\(([ivxlcdmIVXLCDM]+)\))?/);if(!m)return[0,'',0];const letter=(m[2]||m[3]||'').toLowerCase();return[parseInt(m[1]||0),letter,_romanIdx[(m[4]||'').toLowerCase()]||0];}
     d.questions.sort((a,b)=>{const pA=_parseQ(a.number),pB=_parseQ(b.number);return pA[0]-pB[0]||pA[1].localeCompare(pB[1])||pA[2]-pB[2]||(a._origIdx-b._origIdx);});
