@@ -81,7 +81,7 @@ def _warm_trocr():
         from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
         processor = TrOCRProcessor.from_pretrained(TROCR_CHECKPOINT)
-        model = VisionEncoderDecoderModel.from_pretrained(TROCR_CHECKPOINT).to("cpu")
+        model = VisionEncoderDecoderModel.from_pretrained(TROCR_CHECKPOINT, torch_dtype=torch.float32)
         model.eval()
 
         with _trocr_lock:
