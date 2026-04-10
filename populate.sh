@@ -108,8 +108,11 @@ else
 fi
 
 # ── Download TrOCR ───────────────────────────────────────────
+echo "=== Installing hf_transfer (required by RunPod HF_HUB_ENABLE_HF_TRANSFER) ==="
+$PIP install --target="$PYPACKAGES" --quiet "hf_transfer"
+
 echo "=== Downloading TrOCR: $TROCR_CHECKPOINT ==="
-PYTHONPATH="$PYPACKAGES" python3.10 - <<EOF
+PYTHONPATH="$PYPACKAGES" HF_HUB_ENABLE_HF_TRANSFER=0 python3.10 - <<EOF
 import os, sys, torch
 sys.path.insert(0, os.environ["PYTHONPATH"])
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
