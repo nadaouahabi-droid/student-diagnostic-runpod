@@ -147,14 +147,14 @@ for i in $(seq 1 30); do
     echo "  waiting for Ollama... ($i)"
 done
 
-OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5vl:7b-q4_K_M
+OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull minicpm-v:8b
 OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5:7b-instruct-q4_K_M
 kill "$OLLAMA_PID" 2>/dev/null || true
 
 # ── Verify Ollama manifests (tag-level) ──────────────────────
 echo "=== Verifying Ollama manifests ==="
 MANIFEST_BASE="$OLLAMA_MODELS/manifests/registry.ollama.ai/library"
-REQUIRED_MODELS=("qwen2.5vl:7b-q4_K_M" "qwen2.5:7b-instruct-q4_K_M")
+REQUIRED_MODELS=("minicpm-v:8b" "qwen2.5:7b-instruct-q4_K_M")
 MANIFEST_ERRORS=0
 
 for MODEL_TAG in "${REQUIRED_MODELS[@]}"; do
