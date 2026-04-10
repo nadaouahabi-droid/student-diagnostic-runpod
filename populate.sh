@@ -33,9 +33,15 @@ apt-get update -qq && apt-get install -y --no-install-recommends \
 
 # Upgrade libstdc++ to support Paddle 
 echo "=== Upgrading libstdc++ (fix GLIBCXX) ==="
-add-apt-repository -y ppa:ubuntu-toolchain-r/test
-apt-get update -qq && apt-get install -y --no-install-recommends \
-    libstdc++6
+curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x60c317803a41ba51845e371a1e9377a2ba9ef27f" \
+  | gpg --dearmor \
+  | tee /usr/share/keyrings/ubuntu-toolchain-r.gpg > /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/ubuntu-toolchain-r.gpg] \
+  https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu jammy main" \
+  > /etc/apt/sources.list.d/ubuntu-toolchain-r.list
+
+apt-get update -qq && apt-get install -y --no-install-recommends libstdc++6
 
 # ── Pin all pip/python calls to python3.10  ─
 echo "=== Bootstrapping pip for Python 3.10 ==="
