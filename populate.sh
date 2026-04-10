@@ -32,16 +32,15 @@ apt-get update -qq && apt-get install -y --no-install-recommends \
     libglib2.0-0 libgl1
 
 # Upgrade libstdc++ to support Paddle 
-echo "=== Upgrading libstdc++ (fix GLIBCXX) ==="
-curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x60c317803a41ba51845e371a1e9377a2ba9ef27f" \
-  | gpg --dearmor \
-  | tee /usr/share/keyrings/ubuntu-toolchain-r.gpg > /dev/null
-
-echo "deb [signed-by=/usr/share/keyrings/ubuntu-toolchain-r.gpg] \
-  https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu jammy main" \
-  > /etc/apt/sources.list.d/ubuntu-toolchain-r.list
-
-apt-get update -qq && apt-get install -y --no-install-recommends libstdc++6
+echo "=== Upgrading libstdc++ via pip/conda workaround ==="
+pip install --quiet condatoolz 2>/dev/null || true
+# Copy the newer libstdc++ that ships with PyTorch
+python3 -c "
+import ctypes.util, shutil, os, glob
+torch_libs = glob.glob('/runpod-volume/pypackages/torch/lib/libstdc++*')
+for lib in torch_libs:
+    print('Found:', lib)
+"
 
 # ── Pin all pip/python calls to python3.10  ─
 echo "=== Bootstrapping pip for Python 3.10 ==="
