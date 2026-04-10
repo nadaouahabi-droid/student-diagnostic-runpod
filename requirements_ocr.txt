@@ -1,3 +1,11 @@
-Flask==3.0.0
-requests==2.31.0
-gunicorn==21.2.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+numpy==1.24.4
+paddlepaddle==2.6.1
+paddleocr==2.7.3
+opencv-python-headless==4.8.1.78
+Pillow
+fastapi
+uvicorn
+transformers
+torch==2.0.1+cpu
