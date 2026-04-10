@@ -353,19 +353,18 @@ if (typeof pdfjsLib !== 'undefined') {
 
 // ── STATE ──
 let APP = {
-  provider: 'ollama', inputMode: 'image',
+  provider: 'hf', inputMode: 'image',
   images: [], pdfData: null, pdfName: null,
   studentName:'', grade:'', subject:'', examType:'', script:'', context:'',
   analysis:null, report:null, plan:null, worksheet:null,
   completedPages: new Set(['input'])
 };
 
-// ── MODEL DEFAULTS ──
-const DEFAULT_VISION_MODEL  = 'minicpm-v:8b';           // red-ink mark detection only
-const DEFAULT_TEXT_MODEL    = 'qwen2.5:7b-instruct-q4_K_M';
-const DEFAULT_PADDLE_MODEL  = 'paddleocr';              // printed text + layout
-const DEFAULT_TROCR_MODEL   = 'microsoft/trocr-base-handwritten'; // student handwriting
-const DEFAULT_TIMEOUT_MIN   = 15;
+// ── MODEL / SPACE CONSTANTS ──
+const DEFAULT_TEXT_MODEL   = 'google/flan-t5-xxl';
+const DEFAULT_PADDLE_SPACE = 'your-hf-user/paddleocr-space';
+const DEFAULT_TROCR_SPACE  = 'your-hf-user/trocr-space';
+const DEFAULT_TIMEOUT_MIN  = 15;
 
 const DEFAULT_SYSTEM = [
   'You are an expert educational diagnostic specialist.',
@@ -674,60 +673,38 @@ async function callAI(prompt, images, pdfData, systemMsg) {
   return callOCRPipeline(prompt, images, systemMsg);
 }
 
-// ── RUNPOD POLLING HELPER ──
+// ── HF BACKEND HELPER ──
 async function runpodCall(input, timeoutMs = 600000) {
-  const r = await fetch('/api/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error('Server proxy ' + r.status + ': ' + t.slice(0, 200));
-  }
-
-  const { jobId } = await r.json();
-  if (!jobId) {
-    throw new Error('No jobId returned from server');
-  }
-
-  console.log("Job submitted:", jobId);
-
-  const start = Date.now();
-  while (true) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error("Timeout waiting for RunPod job");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error('Backend error ' + r.status + ': ' + t.slice(0, 200));
     }
-    const poll = await fetch(`/api/status?jobId=${jobId}`);
-    const data = await poll.json();
-    console.log("Status:", data.status);
-    if (data.status === "COMPLETED") return data.output;
-    if (data.status === "FAILED")    throw new Error("RunPod job failed: " + JSON.stringify(data));
-    if (data.status === "CANCELLED" || data.status === "TIMED_OUT") throw new Error("RunPod job " + data.status);
-    await new Promise(r => setTimeout(r, 3000));
+    return await r.json(); 
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-// ── OCR PIPELINE — 3-STAGE: PaddleOCR → TrOCR → minicpm-v (marks only) ──
+// ── OCR PIPELINE — 3-STAGE: PaddleOCR → TrOCR → FLAN-T5 (marks inference) ──
 
 // Stage 1: PaddleOCR — layout detection + printed text (question numbers, wording, mark allocations)
 async function paddleOCRPage(image, pageNum) {
   try {
     const out = await runpodCall({
       action: 'paddleocr',
+      space: DEFAULT_PADDLE_SPACE,
       image: image.base64,
-      options: {
-        use_angle_cls: true,  // auto-rotate skewed pages
-        lang: 'en',
-        det: true,            // text region detection
-        rec: true,            // text recognition
-        cls: true,            // direction classification
-        use_gpu: true,
-      }
     }, 90000);
     // Expected: { blocks: [{text, type, bbox:[x1,y1,x2,y2], confidence, row_index}] }
-    // type is 'printed' for most; PaddleOCR may flag low-confidence regions as 'handwritten'
     return out && out.blocks ? out : { blocks: [] };
   } catch(e) {
     console.warn(`PaddleOCR page ${pageNum} failed:`, e.message);
@@ -736,22 +713,12 @@ async function paddleOCRPage(image, pageNum) {
 }
 
 // Stage 2: TrOCR — handwritten student answers and working
-// microsoft/trocr-base-handwritten is trained on IAM Handwriting Database,
-// making it far superior to a general vision LLM for reading student pencil/ink handwriting
 async function trocRPage(image, pageNum) {
   try {
     const out = await runpodCall({
       action: 'trocr',
-      model: DEFAULT_TROCR_MODEL,
+      space: DEFAULT_TROCR_SPACE,
       image: image.base64,
-      // segment_mode: 'line' — backend should split page into line regions and run TrOCR per line
-      // then stitch results back in reading order (top-to-bottom, left-to-right)
-      segment_mode: 'line',
-      options: {
-        beam_size: 4,           // beam search width — better accuracy vs speed
-        max_new_tokens: 128,    // per line; student answers are rarely longer
-        skip_printed: true,     // backend should skip high-contrast printed regions (handled by PaddleOCR)
-      }
     }, 120000);
     // Expected: { lines: [{text, bbox:[x1,y1,x2,y2], confidence}], full_text: '...' }
     return out && (out.lines || out.full_text) ? out : { lines: [], full_text: '' };
@@ -810,9 +777,7 @@ function buildPageTranscript(pageNum, paddleResult, trocrResult) {
   return lines.join('\n');
 }
 
-// Stage 3: minicpm-v — focused ONLY on red-ink teacher marks.
-// Given pre-extracted printed+handwritten text as context, the model only needs to
-// visually identify ink colour (red vs dark), which is a much narrower task → fewer hallucinations.
+// Stage 3: FLAN-T5 — red-ink mark inference from pre-extracted transcript text.
 async function detectRedInkMarks(image, pageNum, preExtractedTranscript) {
   const questionList = (preExtractedTranscript.match(/Q[\w()]+:/g) || [])
     .map(q => q.replace(':', ''))
@@ -820,44 +785,32 @@ async function detectRedInkMarks(image, pageNum, preExtractedTranscript) {
     .join(', ');
 
   const marksPrompt =
-    'You are examining a marked exam paper. The question text and student answers have already been ' +
-    'extracted by specialist OCR models and are shown below. Your ONLY task is to identify RED INK ' +
-    'marks left by the teacher — ticks, crosses, circled numbers, written scores.\n\n' +
+    'You are examining a marked exam paper transcript. The question text and student answers have already been ' +
+    'extracted by specialist OCR models and are shown below. Your ONLY task is to identify teacher marks ' +
+    '— ticks, crosses, circled numbers, written scores — from the transcript text.\n\n' +
     'PRE-EXTRACTED PAGE CONTENT:\n' +
     preExtractedTranscript + '\n\n' +
     'Questions detected on this page: ' + (questionList || 'see transcript above') + '\n\n' +
-    'RED INK DETECTION RULES:\n' +
-    '- Teacher marks are ALWAYS in RED ink — never dark/black/blue/green ink.\n' +
-    '- Red circled number (e.g. circled 2) = marks awarded for that question.\n' +
-    '- Red tick (checkmark) = method or answer correct — contributes to mark count.\n' +
-    '- Red X (cross) anywhere near an answer = 0 marks for that question, NO exceptions.\n' +
-    '- Red fraction (e.g. 1/2) = partial mark = 0.5.\n' +
-    '- Red number written at line end or in margin = marks for that question.\n' +
-    '- Red X overrides all red ticks on the same question — the final verdict is 0.\n' +
-    '- Student dark-ink numbers are NOT marks. Ignore them.\n' +
-    '- If no red ink is visible for a question, write: unmarked\n\n' +
+    'MARK DETECTION RULES:\n' +
+    '- Circled number (e.g. circled 2) = marks awarded for that question.\n' +
+    '- Tick (checkmark) = method or answer correct — contributes to mark count.\n' +
+    '- X (cross) anywhere near an answer = 0 marks for that question, NO exceptions.\n' +
+    '- Fraction (e.g. 1/2) = partial mark = 0.5.\n' +
+    '- Number written at line end or in margin = marks for that question.\n' +
+    '- X overrides all ticks on the same question — the final verdict is 0.\n' +
+    '- If no mark is visible for a question, write: unmarked\n\n' +
     'OUTPUT FORMAT — one line per question, nothing else:\n' +
     'Q1: 2\nQ2: 0\nQ3: unmarked\nQ4a: 1\nQ4b: 0\n\n' +
     'Do NOT output any prose. Do NOT explain. Only Q-lines.';
 
   try {
     const out = await runpodCall({
-      action: 'ollama-chat',
-      model: DEFAULT_VISION_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a specialist at detecting red ink marks on exam papers. ' +
-                   'Ignore all black/dark ink. Report only what you see in RED ink. ' +
-                   'Output ONLY Q-number lines in the exact format shown.'
-        },
-        { role: 'user', content: marksPrompt, images: [image.base64] }
-      ],
-      options: { temperature: 0.0, num_predict: 512, num_ctx: 16384 },
-      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
+      action: 'flan-text',
+      model: DEFAULT_TEXT_MODEL,
+      prompt: marksPrompt,
+    }, DEFAULT_TIMEOUT_MIN * 60000);
 
-    const content = (out.content || '').trim();
+    const content = (out.generated_text || out.content || '').trim();
     const marks = {};
     const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
     let m;
@@ -866,28 +819,28 @@ async function detectRedInkMarks(image, pageNum, preExtractedTranscript) {
     }
     return marks; // { '1': '2', '2': '0', '3a': 'unmarked', ... }
   } catch(err) {
-    console.warn(`Red ink detection failed for page ${pageNum}:`, err.message);
+    console.warn(`Mark detection failed for page ${pageNum}:`, err.message);
     return {};
   }
 }
 
 // Assemble final structured transcript from all 3 stage outputs.
-// This is what qwen2.5 receives — far richer and more accurate than a single vision-LLM pass.
+// This is what FLAN-T5 receives for the full diagnostic analysis.
 function assemblePageBlock(pageNum, preTranscript, redInkMarks) {
-  const lines = [preTranscript, '', '[TEACHER MARKS — minicpm-v red ink detection]'];
+  const lines = [preTranscript, '', '[TEACHER MARKS — FLAN-T5 mark inference from transcript]'];
 
   if (Object.keys(redInkMarks).length === 0) {
-    lines.push('(no red ink marks detected — marks will be inferred from student answers)');
+    lines.push('(no marks detected — marks will be inferred from student answers)');
   } else {
     Object.entries(redInkMarks).forEach(([qNum, awarded]) => {
       const verdict = awarded === 'unmarked' ? 'unmarked (infer from student answer)'
-        : awarded === '0' ? `0 marks (red X — incorrect)`
+        : awarded === '0' ? `0 marks (incorrect)`
         : `${awarded} marks awarded`;
       lines.push(`Q${qNum}: ${verdict}`);
     });
   }
 
-  // Generate the structured Q-blocks that qwen2.5 expects
+  // Generate the structured Q-blocks that FLAN-T5 expects
   // Extract question numbers from printed text (PaddleOCR is the authoritative source)
   const qNums = [...new Set(
     (preTranscript.match(/\bQ(\d+[a-z]?(?:\([ivx]+\))?)/gi) || []).map(q => q.replace(/^Q/i,''))
@@ -908,7 +861,6 @@ function assemblePageBlock(pageNum, preTranscript, redInkMarks) {
 }
 
 async function callOCRPipeline(prompt, images, customSystemMsg) {
-  const textModel  = DEFAULT_TEXT_MODEL;
   const timeoutMin = DEFAULT_TIMEOUT_MIN;
 
   // ── Text-only path (no images) ──
@@ -916,33 +868,20 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     APP.rawPageText = prompt;
     updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
     const out = await runpodCall({
-      action: 'ollama-chat',
-      model: textModel,
-      messages: [
-        { role: 'system', content: customSystemMsg || DEFAULT_SYSTEM },
-        { role: 'user',   content: prompt }
-      ],
-      options: { temperature: 0.05, num_predict: 8192, num_ctx: 16384 },
-      timeout_seconds: Math.round(timeoutMin * 60)
+      action: 'flan-text',
+      model: DEFAULT_TEXT_MODEL,
+      system: customSystemMsg || DEFAULT_SYSTEM,
+      prompt: prompt,
     }, timeoutMin * 60000 + 30000);
-    return out.content || '';
+    return out.generated_text || out.content || '';
   }
 
   // ── Image path — 3-stage specialist pipeline ──
-  // Stage weighting: PaddleOCR=printed accuracy, TrOCR=handwriting accuracy, minicpm-v=mark colour detection
+  // Stage weighting: PaddleOCR=printed accuracy, TrOCR=handwriting accuracy, FLAN-T5=mark inference + full analysis
 
   const pageInterpretations = [];
 
-  // Pull minicpm-v once (PaddleOCR and TrOCR are Python-native, no pull needed)
-  updateLoadingText('analysis', 'Loading models…', 'Pulling minicpm-v:8b for red-ink detection — one-time (~5GB)');
-  try {
-    await runpodCall({ action: 'ollama-pull', model: DEFAULT_VISION_MODEL, timeout_seconds: 600 }, 660000);
-  } catch(e) {
-    console.warn('minicpm-v pull skipped (may already be cached):', e.message);
-  }
-
-  // Per-page: run PaddleOCR → TrOCR → minicpm-v in sequence
-  // (PaddleOCR+TrOCR could be parallelised if the backend supports it — flagged in action payload)
+  // Per-page: run PaddleOCR → TrOCR → FLAN-T5 mark inference in sequence
   for (let i = 0; i < images.length; i++) {
 
     // ── Stage 1 progress ──
@@ -965,8 +904,8 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 
     // ── Stage 3 progress ──
     updateLoadingText('analysis',
-      `Page ${i + 1} of ${images.length} — detecting teacher marks…`,
-      'minicpm-v: scanning for red ink ticks, crosses and circled scores'
+      `Page ${i + 1} of ${images.length} — inferring teacher marks…`,
+      'FLAN-T5: reading mark annotations from transcript'
     );
     const redInkMarks = await detectRedInkMarks(images[i], i + 1, preTranscript);
 
@@ -982,7 +921,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   }
 
   // ── Build analysis prompt ──
-  updateLoadingText('analysis', 'Building your diagnostic…', 'Analysing every question with qwen2.5');
+  updateLoadingText('analysis', 'Building your diagnostic…', 'Analysing every question with FLAN-T5');
   const analysisStages = [
     'Identifying topic gaps…', 'Classifying mistake patterns…',
     'Computing topic scores…', 'Checking for recurring errors…', 'Finalising your report…',
@@ -1007,80 +946,43 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       `Your "questions" JSON array MUST have exactly ${totalExpectedQs} entries in page order. Do not skip or merge any.`
     : '';
 
-  // Note the data provenance so qwen2.5 knows which source to trust for each field
+  // Note the data provenance so FLAN-T5 knows which source to trust for each field
   const provenanceNote = `\n\nDATA PROVENANCE NOTE:
 - Question text and marks available: trust [PRINTED TEXT] (PaddleOCR — high accuracy for printed characters)
 - Student answers and working: trust [STUDENT HANDWRITING] (TrOCR microsoft/trocr-base-handwritten — specialist model)
-- Marks awarded: trust [TEACHER MARKS] (minicpm-v red ink detection) — if a question shows "unmarked", infer from student answer quality
+- Marks awarded: trust [TEACHER MARKS] (FLAN-T5 mark inference) — if a question shows "unmarked", infer from student answer quality
 - Where sources conflict, priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
 
   const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages, extracted by 3-stage OCR pipeline):\n${APP.rawPageText}${provenanceNote}${countHint}`;
 
   const finalOut = await runpodCall({
-    action: 'ollama-chat',
-    model: textModel,
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are an expert educational diagnostic specialist.',
-          'Return ONLY valid JSON exactly as instructed.',
-          'MANDATORY JSON RULES:',
-          '1. Double quotes only. NEVER single quotes.',
-          '2. NEVER put a raw double-quote inside a string value — use parentheses instead.',
-          '3. NEVER put raw newlines or tabs inside string values — use a space.',
-          '4. NEVER use math symbols — write x^2 not squared, sqrt() not root symbol, +/- not plus-minus symbol.',
-          '5. No trailing commas before ] or }.',
-          '6. All string values must be plain ASCII under 200 characters.',
-          '7. No markdown, no preamble, no commentary outside the JSON.',
-          'ORDERING RULE: list questions in the exact order they appear in the exam — page 1 first.',
-          'COMPLETENESS RULE: every question block in EXAM CONTENT must appear in the questions array.',
-          'PROVENANCE RULE: for marks awarded, use [TEACHER MARKS] section; for question text, use [PRINTED TEXT] section; for student answers, use [STUDENT HANDWRITING] section.',
-        ].join(' ')
-      },
-      { role: 'user', content: fullPrompt }
-    ],
-    options: { temperature: 0.05, num_predict: 14336, num_ctx: 32768 },
-    timeout_seconds: Math.round(timeoutMin * 3 * 60)
+    action: 'flan-text',
+    model: DEFAULT_TEXT_MODEL,
+    system: [
+      'You are an expert educational diagnostic specialist.',
+      'Return ONLY valid JSON exactly as instructed.',
+      'MANDATORY JSON RULES:',
+      '1. Double quotes only. NEVER single quotes.',
+      '2. NEVER put a raw double-quote inside a string value — use parentheses instead.',
+      '3. NEVER put raw newlines or tabs inside string values — use a space.',
+      '4. NEVER use math symbols — write x^2 not squared, sqrt() not root symbol, +/- not plus-minus symbol.',
+      '5. No trailing commas before ] or }.',
+      '6. All string values must be plain ASCII under 200 characters.',
+      '7. No markdown, no preamble, no commentary outside the JSON.',
+      'ORDERING RULE: list questions in the exact order they appear in the exam — page 1 first.',
+      'COMPLETENESS RULE: every question block in EXAM CONTENT must appear in the questions array.',
+      'PROVENANCE RULE: for marks awarded, use [TEACHER MARKS] section; for question text, use [PRINTED TEXT] section; for student answers, use [STUDENT HANDWRITING] section.',
+    ].join(' '),
+    prompt: fullPrompt,
   }, timeoutMin * 3 * 60000 + 30000);
-  return finalOut.content || '';
+  return finalOut.generated_text || finalOut.content || '';
 }
 
-// verifyMarksWithVision is retained as a safety fallback
-// but is no longer called in the main pipeline —
-// minicpm-v's focused red-ink pass in detectRedInkMarks() replaces it.
+// verifyMarksWithVision is no longer called in the main pipeline.
+// Retained only as a reference — safe to remove.
 async function verifyMarksWithVision(images, pageInterpretations) {
-  const verified = [];
-  for (let i = 0; i < images.length; i++) {
-    const contextText = pageInterpretations[i] || '';
-    const marksPrompt =
-      'You are an expert exam marker doing a final verification of red ink teacher scores.\n\n' +
-      'PRE-EXTRACTED CONTEXT:\n' + contextText.slice(0, 1500) + '\n\n' +
-      'Look at the image. For every question, confirm the marks awarded by the teacher (RED INK ONLY).\n' +
-      'A red X anywhere = 0. A red circled number = that score. Red tick = contributes to mark.\n' +
-      'Output ONLY Q-number lines:\nQ1: 2\nQ2: 0\nQ3: unmarked';
-    try {
-      const out = await runpodCall({
-        action: 'ollama-chat',
-        model: DEFAULT_VISION_MODEL,
-        messages: [
-          { role: 'system', content: 'Expert exam marker. Red ink only. Output Q-lines only.' },
-          { role: 'user', content: marksPrompt, images: [images[i].base64] }
-        ],
-        options: { temperature: 0.0, num_predict: 512, num_ctx: 16384 },
-        timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-      }, DEFAULT_TIMEOUT_MIN * 60000 + 30000);
-      const content = (out.content || '').trim();
-      const lineRe = /^Q([\w()]+):\s*(\d+(?:\.\d+)?|unmarked)/gim;
-      let m;
-      while ((m = lineRe.exec(content)) !== null) {
-        verified.push({ number: m[1].trim(), marksAwarded: m[2].trim() });
-      }
-    } catch(err) {
-      console.warn(`verifyMarksWithVision page ${i + 1}:`, err.message);
-    }
-  }
-  return verified;
+  // Replaced by detectRedInkMarks() which uses FLAN-T5 on the pre-extracted transcript.
+  return [];
 }
   
 async function callOllama(prompt, images) {
@@ -1394,7 +1296,7 @@ MATHEMATICS-SPECIFIC OCR RULES — follow exactly:
 - Method marks (M), Accuracy marks (A), Follow-through marks (ft/FT): note them
 - Working-out lines (even crossed out): transcribe fully — this is critical for diagnosing method errors
 - Box or circle around final answer: note as [FINAL ANSWER: ...]
-- Teacher marks are always in RED ink — only count red ticks, red crosses, and red circled/boxed numbers as marks awarded`;
+- Teacher marks are always annotated — only count ticks, crosses, and circled/boxed numbers as marks awarded`;
 }
 
 function mathAnalysisRules() {
@@ -1422,7 +1324,7 @@ Mistake classification — identify these specific math error types:
 
 Chain-of-thought instruction: Before producing JSON, silently verify:
   1. Count total marks available across all questions
-  2. Count marks awarded (red ticks + red partial marks + red circled scores)
+  2. Count marks awarded (ticks + partial marks + circled scores)
   3. Calculate percentage = awarded/total * 100
   4. Only then produce the JSON`;
 }
@@ -1431,7 +1333,7 @@ function mathChainOfThought() {
   if (!isMath()) return '';
   return 'STEP 1 - Before writing JSON, mentally work through:\n'
     + '- List every question and its total marks available\n'
-    + '- List every question and its marks awarded (count RED ticks, read RED circled numbers, note RED partial marks)\n'
+    + '- List every question and its marks awarded (count ticks, read circled numbers, note partial marks)\n'
     + '- Sum both to get totalMarks and marksObtained\n'
     + '- Identify which math topic each question tests\n'
     + '- Identify the specific error type for each wrong or partial answer\n'
@@ -1486,7 +1388,7 @@ async function runAnalysis() {
   );
 
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
-  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the vision model and provided as text below]` : '';
+  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the OCR pipeline and provided as text below]` : '';
 
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathAnalysisRules()}
@@ -1499,7 +1401,7 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
 3. If a question number is visible but you cannot read the text or the question does not exist, omit it entirely — do not include it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. TEACHER MARK RULE: if the teacher wrote 0 in RED ink, record marksAwarded as 0 UNLESS explicitly corrected.
+5. TEACHER MARK RULE: if the teacher wrote 0, record marksAwarded as 0 UNLESS explicitly corrected.
 
 ${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only.
 
@@ -1953,15 +1855,11 @@ ${mathPlanExtras()}`;
 
   async function planCall(p) {
     return (await runpodCall({
-      action: 'ollama-chat',
+      action: 'flan-text',
       model: DEFAULT_TEXT_MODEL,
-      messages: [
-        { role: 'system', content: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it. Every action string must be specific to the student weak topics and wrong questions given — never write generic actions.' },
-        { role: 'user', content: p }
-      ],
-      options: { temperature: 0.05, num_predict: 8192, num_ctx: 8192},
-      timeout_seconds: Math.round(DEFAULT_TIMEOUT_MIN * 60)
-    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000)).content || '';
+      system: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it. Every action string must be specific to the student weak topics and wrong questions given — never write generic actions.',
+      prompt: p,
+    }, DEFAULT_TIMEOUT_MIN * 60000 + 30000)).generated_text || '';
   }
 
   try {
