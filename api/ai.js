@@ -1,31 +1,14 @@
-export default async function handler(req, res) {
-  try {
-    let body = req.body;
-    if (typeof body === "string") {
-      body = JSON.parse(body);
-    }
+const HF_URL = process.env.HF_API_URL;
 
-    const response = await fetch(
-      `https://api.runpod.ai/v2/${process.env.RUNPOD_ENDPOINT_ID}/run`,
-      {
+export default async function handler(req, res) {
+    const response = await fetch(`${HF_URL}/ocr`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${process.env.RUNPOD_API_KEY}`,
-          "Content-Type": "application/json",
+            "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          input: body,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    return res.status(200).json({
-      jobId: data.id
+        body: JSON.stringify(req.body)
     });
 
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+    const data = await response.json();
+    res.status(200).json(data);
 }
