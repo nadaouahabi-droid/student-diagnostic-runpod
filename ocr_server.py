@@ -1,246 +1,298 @@
-#!/usr/bin/env python3
 """
-OCR Server for Student Diagnostic System
-Pipeline: PaddleOCR (layout + print text) → TrOCR (handwriting refinement)
-Serves results to the HTML frontend at http://localhost:5005
+Student Diagnostic OCR + Reasoning API (CPU-only)
+PaddleOCR + TrOCR + FLAN-T5
 """
-import os
-os.environ['PADDLEX_HOME']           = '/runpod-volume/paddle-cache/.paddlex'
-os.environ['FLAGS_use_mkldnn']       = '0'
-os.environ['PADDLE_DISABLE_MKLDNN'] = '1'
-os.environ['HF_HOME']               = '/runpod-volume/hf-cache/huggingface'
-os.environ['TRANSFORMERS_CACHE']    = '/runpod-volume/hf-cache/huggingface'
-import io, base64, sys, time, logging, traceback
-import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+
+import threading
+import time
+import io
+import base64
+import logging
+import traceback
 from typing import Optional
 
+import numpy as np
+from PIL import Image, ImageEnhance
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+# ─────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI()
 
-# ─────────────────────────────────────────
-# LAZY-LOAD MODELS (initialise once on first request)
-# ─────────────────────────────────────────
+# ─────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────
+TROCR_CHECKPOINT = "microsoft/trocr-base-handwritten"
+TEXT_MODEL_NAME = "google/flan-t5-small"
+MAX_OCR_SIDE = 3000
+
+# ─────────────────────────────────────────────
+# Globals
+# ─────────────────────────────────────────────
 _paddle = None
+_paddle_lock = threading.Lock()
+
 _trocr_processor = None
 _trocr_model = None
-_device = None
+_torch = None
+_trocr_lock = threading.Lock()
 
-def get_paddle():
+_text_tokenizer = None
+_text_model = None
+
+PADDLE_READY = threading.Event()
+TROCR_READY = threading.Event()
+TEXT_READY = threading.Event()
+MODELS_READY = threading.Event()
+
+# ─────────────────────────────────────────────
+# Model Warmup
+# ─────────────────────────────────────────────
+def _warm_paddle():
     global _paddle
-    if _paddle is None:
-        log.info("Loading PaddleOCR (first call)…")
+    try:
         from paddleocr import PaddleOCR
-        _paddle = PaddleOCR(
-            use_angle_cls=True,
-            lang="en",
-            device="cpu",
-        )
-        log.info("PaddleOCR ready.")
-    return _paddle
+        with _paddle_lock:
+            if _paddle is None:
+                _paddle = PaddleOCR(
+                    use_angle_cls=True,
+                    lang="en",
+                    use_gpu=False,
+                    det_limit_side_len=960
+                )
+        PADDLE_READY.set()
+        log.info("[init] PaddleOCR ready")
+        return True
+    except Exception:
+        log.error(traceback.format_exc())
+        return False
 
-def get_trocr():
-    global _trocr_processor, _trocr_model, _device
-    if _trocr_model is None:
-        log.info("Loading TrOCR (first call)…")
+
+def _warm_trocr():
+    global _trocr_processor, _trocr_model, _torch
+    try:
         import torch
         from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-        _device = "cuda" if torch.cuda.is_available() else "cpu"
-        # Use 'large' for best accuracy; swap to 'base' if RAM is tight
-        ckpt = "microsoft/trocr-large-handwritten"
-        _trocr_processor = TrOCRProcessor.from_pretrained(ckpt)
-        _trocr_model = VisionEncoderDecoderModel.from_pretrained(ckpt).to(_device)
-        _trocr_model.eval()
-        log.info(f"TrOCR ready on {_device}.")
-    return _trocr_processor, _trocr_model, _device
+
+        processor = TrOCRProcessor.from_pretrained(TROCR_CHECKPOINT)
+        model = VisionEncoderDecoderModel.from_pretrained(TROCR_CHECKPOINT).to("cpu")
+        model.eval()
+
+        with _trocr_lock:
+            _trocr_processor = processor
+            _trocr_model = model
+            _torch = torch
+
+        TROCR_READY.set()
+        log.info("[init] TrOCR ready (CPU)")
+        return True
+    except Exception:
+        log.error(traceback.format_exc())
+        return False
 
 
-# ─────────────────────────────────────────
-# IMAGE HELPERS
-# ─────────────────────────────────────────
+def _warm_text():
+    global _text_tokenizer, _text_model
+    try:
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+        _text_tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
+        _text_model = AutoModelForSeq2SeqLM.from_pretrained(TEXT_MODEL_NAME)
+
+        TEXT_READY.set()
+        log.info("[init] FLAN-T5 ready (CPU)")
+        return True
+    except Exception:
+        log.error(traceback.format_exc())
+        return False
+
+
+def _prewarm():
+    results = {}
+
+    def run(name, fn):
+        results[name] = fn()
+
+    threads = [
+        threading.Thread(target=run, args=("paddle", _warm_paddle)),
+        threading.Thread(target=run, args=("trocr", _warm_trocr)),
+        threading.Thread(target=run, args=("text", _warm_text)),
+    ]
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    if all(results.values()):
+        MODELS_READY.set()
+        log.info("[init] All models ready")
+
+
+threading.Thread(target=_prewarm, daemon=True).start()
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
 def b64_to_pil(b64: str) -> Image.Image:
-    raw = base64.b64decode(b64)
-    return Image.open(io.BytesIO(raw)).convert("RGB")
+    return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
 
-def preprocess(img: Image.Image, scale: float = 2.0) -> Image.Image:
-    """Upscale + sharpen for better OCR accuracy."""
+
+def preprocess(img: Image.Image) -> Image.Image:
     w, h = img.size
-    img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-    img = ImageEnhance.Sharpness(img).enhance(2.0)
-    img = ImageEnhance.Contrast(img).enhance(1.4)
+    scale = min(1.5, MAX_OCR_SIDE / max(w, h))
+    if scale != 1:
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+    img = ImageEnhance.Sharpness(img).enhance(1.8)
+    img = ImageEnhance.Contrast(img).enhance(1.3)
     return img
 
 
-# ─────────────────────────────────────────
-# PADDLE OCR ON ONE PAGE
-# ─────────────────────────────────────────
-def run_paddle(img: Image.Image):
-    """Return list of dicts: {bbox, text, confidence}"""
-    paddle = get_paddle()
-    arr = np.array(img)
-    result = paddle.ocr(arr)
+# ─────────────────────────────────────────────
+# PaddleOCR
+# ─────────────────────────────────────────────
+def run_paddle(img):
+    result = _paddle.ocr(np.array(img), cls=True)
     items = []
-    if result and result[0]:
-        for line in result[0]:
-            if not line:
-                continue
-            bbox, (text, conf) = line
-            items.append({"bbox": bbox, "text": text.strip(), "confidence": float(conf)})
+
+    if not result:
+        return items
+
+    for line in result[0]:
+        bbox = line[0]
+        text = line[1][0]
+        conf = float(line[1][1])
+        items.append({"bbox": bbox, "text": text, "confidence": conf})
+
     return items
 
 
-# ─────────────────────────────────────────
-# TROCR REFINEMENT ON A SINGLE REGION
-# ─────────────────────────────────────────
-def refine_with_trocr(img: Image.Image, bbox, pad: int = 6) -> Optional[str]:
-    """Crop the bbox from img, run TrOCR, return refined text or None on failure."""
-    try:
-        import torch
-        processor, model, device = get_trocr()
-        xs = [p[0] for p in bbox]
-        ys = [p[1] for p in bbox]
-        x1 = max(0, int(min(xs)) - pad)
-        y1 = max(0, int(min(ys)) - pad)
-        x2 = min(img.width,  int(max(xs)) + pad)
-        y2 = min(img.height, int(max(ys)) + pad)
-        if x2 - x1 < 5 or y2 - y1 < 5:
-            return None
-        crop = img.crop((x1, y1, x2, y2))
-        # Upscale tiny crops so TrOCR has enough pixels
-        if crop.width < 64 or crop.height < 16:
-            scale = max(64 / crop.width, 16 / crop.height, 1)
-            crop = crop.resize((int(crop.width * scale), int(crop.height * scale)), Image.LANCZOS)
-        pv = processor(images=crop, return_tensors="pt").pixel_values.to(device)
-        with torch.no_grad():
-            ids = model.generate(pv, max_new_tokens=80)
-        return processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
-    except Exception as exc:
-        log.debug(f"TrOCR crop failed: {exc}")
-        return None
+# ─────────────────────────────────────────────
+# TrOCR refinement
+# ─────────────────────────────────────────────
+def refine_with_trocr(img, items, threshold=0.7):
+    processor = _trocr_processor
+    model = _trocr_model
+
+    results = []
+
+    for item in items:
+        if item["confidence"] > threshold:
+            results.append(item)
+            continue
+
+        try:
+            bbox = item["bbox"]
+            xs = [p[0] for p in bbox]
+            ys = [p[1] for p in bbox]
+
+            crop = img.crop((min(xs), min(ys), max(xs), max(ys)))
+
+            pixel_values = processor(images=crop, return_tensors="pt").pixel_values
+
+            with _torch.no_grad():
+                ids = model.generate(pixel_values, max_new_tokens=50)
+
+            text = processor.batch_decode(ids, skip_special_tokens=True)[0]
+
+            item["text"] = text.strip()
+            item["refined"] = True
+
+        except:
+            pass
+
+        results.append(item)
+
+    return results
 
 
-# ─────────────────────────────────────────
-# COMBINED PIPELINE FOR ONE PAGE
-# ─────────────────────────────────────────
-def ocr_page(b64: str, refine_threshold: float = 0.72) -> dict:
-    """
-    Full pipeline for one page image (base64).
-    Returns: {text, lines, line_count, timing}
-    """
-    t0 = time.time()
-
+# ─────────────────────────────────────────────
+# OCR Pipeline
+# ─────────────────────────────────────────────
+def ocr_page(b64):
     img = b64_to_pil(b64)
     img_prep = preprocess(img)
 
-    # Stage 1 – PaddleOCR
     items = run_paddle(img_prep)
-    log.info(f"  PaddleOCR → {len(items)} regions")
+    items = refine_with_trocr(img, items)
 
-    # Stage 2 – TrOCR refinement for low-confidence lines
-    output_lines = []
-    refined_count = 0
-    for item in items:
-        text = item["text"]
-        conf = item["confidence"]
-        refined = False
-
-        if conf < refine_threshold and len(text.strip()) > 0:
-            # Scale bbox back to original image coordinates (we upscaled 2×)
-            orig_bbox = [
-                [p[0] / 2.0, p[1] / 2.0] for p in item["bbox"]
-            ]
-            better = refine_with_trocr(img, orig_bbox)
-            if better and len(better) >= len(text) * 0.5:
-                text = better
-                refined = True
-                refined_count += 1
-
-        output_lines.append({
-            "text": text,
-            "confidence": conf,
-            "refined": refined,
-        })
-
-    full_text = "\n".join(l["text"] for l in output_lines if l["text"])
-    elapsed = round(time.time() - t0, 2)
-    log.info(f"  Page done: {len(output_lines)} lines, {refined_count} TrOCR-refined, {elapsed}s")
+    full_text = "\n".join(i["text"] for i in items if i["text"])
 
     return {
         "text": full_text,
-        "lines": output_lines,
-        "line_count": len(output_lines),
-        "refined_count": refined_count,
-        "timing_s": elapsed,
+        "lines": items,
+        "count": len(items)
     }
 
 
-# ─────────────────────────────────────────
-# ROUTES
-# ─────────────────────────────────────────
-@app.route("/health", methods=["GET"])
+# ─────────────────────────────────────────────
+# Text model
+# ─────────────────────────────────────────────
+def run_text_model(prompt):
+    inputs = _text_tokenizer(prompt, return_tensors="pt", truncation=True)
+
+    outputs = _text_model.generate(
+        **inputs,
+        max_new_tokens=200
+    )
+
+    return _text_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+
+# ─────────────────────────────────────────────
+# API
+# ─────────────────────────────────────────────
+class Request(BaseModel):
+    image: Optional[str] = None
+    images: Optional[list[str]] = None
+    prompt: Optional[str] = None
+
+
+@app.get("/")
+def root():
+    return {"message": "OCR + AI API running"}
+
+
+@app.get("/health")
 def health():
-    return jsonify({"status": "ok", "pipeline": ["PaddleOCR", "TrOCR"], "version": "1.0"})
+    return {
+        "paddle": PADDLE_READY.is_set(),
+        "trocr": TROCR_READY.is_set(),
+        "text": TEXT_READY.is_set(),
+        "ready": MODELS_READY.is_set()
+    }
 
 
-@app.route("/ocr", methods=["POST"])
-def ocr_single():
-    """Process a single page image."""
-    data = request.get_json(force=True)
-    b64 = data.get("image", "")
-    threshold = float(data.get("refine_threshold", 0.72))
-    if not b64:
-        return jsonify({"success": False, "error": "No image provided"}), 400
-    try:
-        result = ocr_page(b64, threshold)
-        return jsonify({"success": True, **result})
-    except Exception as exc:
-        log.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(exc)}), 500
+@app.post("/ocr")
+def ocr(req: Request):
+    if not MODELS_READY.is_set():
+        return {"error": "models not ready"}
+
+    return ocr_page(req.image)
 
 
-@app.route("/ocr-batch", methods=["POST"])
-def ocr_batch():
-    """
-    Process multiple pages.
-    Body: { "images": ["base64_page1", "base64_page2", …], "refine_threshold": 0.72 }
-    Returns: { "success": true, "pages": [{page, text, lines, …}], "combined_text": "…" }
-    """
-    data = request.get_json(force=True)
-    images = data.get("images", [])
-    threshold = float(data.get("refine_threshold", 0.72))
+@app.post("/ocr-batch")
+def ocr_batch(req: Request):
+    if not MODELS_READY.is_set():
+        return {"error": "models not ready"}
 
-    if not images:
-        return jsonify({"success": False, "error": "No images provided"}), 400
+    results = []
+    for img in req.images:
+        results.append(ocr_page(img))
 
-    log.info(f"Batch OCR: {len(images)} page(s)")
-    pages = []
-    try:
-        for i, b64 in enumerate(images):
-            log.info(f"Processing page {i+1}/{len(images)}…")
-            result = ocr_page(b64, threshold)
-            pages.append({"page": i + 1, **result})
-
-        combined = "\n\n".join(
-            f"=== PAGE {p['page']} ===\n{p['text']}" for p in pages
-        )
-        return jsonify({"success": True, "pages": pages, "combined_text": combined,
-                        "total_pages": len(pages)})
-
-    except Exception as exc:
-        log.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(exc)}), 500
+    return {"pages": results}
 
 
-# ─────────────────────────────────────────
-# ENTRY POINT
-# ─────────────────────────────────────────
-if __name__ == "__main__":
-    port = int(os.environ.get("OCR_PORT", 5005))
-    log.info(f"Starting OCR server on http://localhost:{port}")
-    log.info("Models will load on first request (may take 30-60 s the first time).")
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=False)
+@app.post("/analyze")
+def analyze(req: Request):
+    if not TEXT_READY.is_set():
+        return {"error": "text model not ready"}
+
+    return {"result": run_text_model(req.prompt)}
