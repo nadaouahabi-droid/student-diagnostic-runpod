@@ -736,7 +736,7 @@ async function paddleOCRPage(image, pageNum) {
 }
 
 // Stage 2: TrOCR — handwritten student answers and working
-// microsoft/trocr-large-handwritten is trained on IAM Handwriting Database,
+// microsoft/trocr-base-handwritten is trained on IAM Handwriting Database,
 // making it far superior to a general vision LLM for reading student pencil/ink handwriting
 async function trocRPage(image, pageNum) {
   try {
@@ -789,7 +789,7 @@ function buildPageTranscript(pageNum, paddleResult, trocrResult) {
 
   // ── STUDENT HANDWRITING (TrOCR) ──
   lines.push('');
-  lines.push('[STUDENT HANDWRITING — TrOCR microsoft/trocr-large-handwritten]');
+  lines.push('[STUDENT HANDWRITING — TrOCR microsoft/trocr-base-handwritten]');
 
   const twLines = trocrResult.lines || [];
   if (twLines.length > 0) {
@@ -1010,7 +1010,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   // Note the data provenance so qwen2.5 knows which source to trust for each field
   const provenanceNote = `\n\nDATA PROVENANCE NOTE:
 - Question text and marks available: trust [PRINTED TEXT] (PaddleOCR — high accuracy for printed characters)
-- Student answers and working: trust [STUDENT HANDWRITING] (TrOCR microsoft/trocr-large-handwritten — specialist model)
+- Student answers and working: trust [STUDENT HANDWRITING] (TrOCR microsoft/trocr-base-handwritten — specialist model)
 - Marks awarded: trust [TEACHER MARKS] (minicpm-v red ink detection) — if a question shows "unmarked", infer from student answer quality
 - Where sources conflict, priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
 
