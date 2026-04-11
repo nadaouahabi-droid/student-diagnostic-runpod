@@ -700,7 +700,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   // ── Text-only path ──
   if (!images || !images.length) {
     APP.rawPageText = prompt;
-    updateLoadingText('analysis', 'Generating analysis…', 'This may take a moment');
     const out = await runpodCall({
       action: 'flan-text',
       model:  DEFAULT_TEXT_MODEL,
