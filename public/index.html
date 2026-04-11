@@ -1236,7 +1236,9 @@ RULES FOR questions array:
 - number: STRING — exact label from the exam e.g. "1", "2", "1a", "1b", "2c" (no spaces, no leading "Q")
 - Sub-sub-questions: "1a(i)", "1a(ii)" — keep parens as-is
 - If question 1 has sub-parts (a), (b), list each SEPARATELY: "1a", "1b" — do NOT merge
-'- questionText: REQUIRED — a brief (max 15 words) description on a SINGLE LINE — if you cannot read the question text write the topic name instead — NEVER leave empty, NEVER write "blank", NO double-quote chars, ASCII only'
+'- questionText: REQUIRED — a brief (max 20 words) description on a SINGLE LINE — if you cannot read the question text write the topic name instead — NEVER leave empty, NEVER write "blank", NO double-quote chars, ASCII only'
+- If a question has labelled sub-parts (e.g. (a), (b), (i), (ii)), create ONE entry per sub-part. Never merge sub-parts into one entry. 
+- number field format for sub-parts: "1a", "1b", "2a(i)", "2a(ii)" etc — write the parent number + sub-part letter + roman numeral with NO spaces.
 - Include one entry per question or sub-question, ordered numerically then alphabetically by sub-part
 - marksAvailable / marksAwarded: numeric
 
