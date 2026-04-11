@@ -718,16 +718,21 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       'PaddleOCR → TrOCR → mark inference (all server-side)',
       i, images.length
     );
-
-    const out = await runpodCall({ action: 'process_page', image: images[i].base64, page_num: i + 1 }, ...);
-    
+  
+    const out = await runpodCall({
+      action:   'process_page',
+      image:    images[i].base64,
+      page_num: i + 1,
+    }, timeoutMin * 60000);
+  
     if (out && out.error && !out.page_block) {
-        throw new Error(`Page ${i+1} OCR failed on server: ${out.error.slice(0, 300)}`);
+      throw new Error(`Page ${i + 1} OCR failed on server: ${out.error.slice(0, 300)}`);
     }
-    
+  
     const pageBlock = (out && out.page_block)
-        ? out.page_block
-        : `=== PAGE ${i + 1} ===\n[OCR_EMPTY: ...]`;
+      ? out.page_block
+      : `=== PAGE ${i + 1} ===\n[OCR_EMPTY: No readable content. Do NOT invent questions for this page.]`;
+  
     pageInterpretations.push(pageBlock);
 
     setLoadingState('analysis',
