@@ -415,7 +415,7 @@ async function handleFiles(files) {
       await handlePDF(f);
     } else if (isImg) {
       try {
-        const b64 = await compressImageFile(f, 1400, 0.88);
+        const b64 = await compressImageFile(f, 2000, 0.92);
         APP.images.push({ base64: b64, mimeType: 'image/jpeg', name: f.name });
       } catch(e) {
         showUploadError(`Could not load image "${f.name}": ${e.message}`);
