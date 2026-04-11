@@ -725,7 +725,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       page_num: i + 1,
     }, timeoutMin * 60000);
 
-    const pageBlock = (out && out.page_block) ? out.page_block : `=== PAGE ${i + 1} ===\n(OCR failed for this page)`;
+    const pageBlock = (out && out.page_block)
+        ? out.page_block
+        : `=== PAGE ${i + 1} ===\n[OCR_EMPTY: No readable content. Do NOT invent questions for this page.]`;
     pageInterpretations.push(pageBlock);
 
     setLoadingState('analysis',
@@ -763,8 +765,21 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 - Marks awarded: trust [TEACHER MARKS] (Qwen mark inference)
 - Priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
 
-  const fullPrompt = `${prompt}\n\nEXAM CONTENT (${images.length} pages, extracted by 3-stage OCR pipeline):\n${combined}${provenanceNote}${countHint}`;
-
+  const ocrIsEmpty = pageInterpretations.every(b => b.includes('OCR_EMPTY'));
+  if (ocrIsEmpty) {
+      throw new Error('OCR returned no readable content from any page. Please check image quality and try again.');
+  }
+  
+  const groundingHeader = `
+  ABSOLUTE GROUNDING CONSTRAINT — HIGHEST PRIORITY:
+  The text below is the COMPLETE and ONLY source of exam content.
+  There are ZERO questions not shown in this text.
+  If a page is marked [OCR_EMPTY], that page has NO questions — do not invent any.
+  You MUST NOT use the subject name, grade, or any other metadata to infer or fabricate questions.
+  If you cannot find a question in the text below, it does not exist in this exam.
+  `;
+  
+  const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by 3-stage OCR pipeline):\n${combined}${provenanceNote}${countHint}`;
   const finalOut = await runpodCall({
     action: 'flan-text',
     model:  DEFAULT_TEXT_MODEL,
