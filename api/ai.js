@@ -1,3 +1,12 @@
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '15mb',    
+    },
+    responseLimit: false,
+  },        
+};
+
 const HF_URL = process.env.HF_API_URL;
 
 export default async function handler(req, res) {
