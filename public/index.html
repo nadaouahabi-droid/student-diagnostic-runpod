@@ -1126,7 +1126,7 @@ MATHEMATICS-SPECIFIC OCR RULES — follow exactly:
 - Working-out lines (even crossed out): transcribe fully — this is critical for diagnosing method errors
 - Box or circle around final answer: note as [FINAL ANSWER: ...]
 - AWARDED MARKS PRIORITY ORDER: (1) circled/boxed number written by teacher — use directly as marksAwarded; (2) tick = full marks for that question; (3) red X or plain X = 0 marks awarded; (4) if completely unmarked, infer from whether the student answer matches expected
-- A red X anywhere on a student answer overrides everything — marksAwarded = 0 for that question';
+- A red X anywhere on a student answer overrides everything — marksAwarded = 0 for that question`;
 }
 
 function mathAnalysisRules() {
@@ -1221,6 +1221,7 @@ async function runAnalysis() {
   const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) were read by Qwen2.5-VL and the structured transcripts are provided below]` : '';
 
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
+${mathOCRRules()}
 ${mathAnalysisRules()}
 Student: ${APP.studentName}, ${APP.grade}
 Subject: ${APP.subject}, Exam: ${APP.examType}
