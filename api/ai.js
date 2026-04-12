@@ -3,78 +3,92 @@ const HF_URL = process.env.HF_API_URL;
 export default async function handler(req, res) {
     const { action, image, images, prompt, system } = req.body;
 
-    let endpoint;
-    let body;
+    if (action === "process_page" || action === "flan-text") {
+        try {
+            const response = await fetch(`${HF_URL}/api/ai`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(req.body),
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                return res.status(response.status).json({ error: text });
+            }
+            return res.status(200).json(await response.json());
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
 
-    if (action === "paddleocr") {
-        endpoint = `${HF_URL}/api/ai`;
-        body = req.body;
+    if (images && images.length > 0) {
+        try {
+            const results = [];
+            for (let i = 0; i < images.length; i++) {
+                const response = await fetch(`${HF_URL}/api/ai`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action:   "process_page",
+                        image:    images[i],
+                        page_num: i + 1,
+                    }),
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    results.push({ error: text, page_num: i + 1 });
+                    continue;
+                }
+                results.push(await response.json());
+            }
+            return res.status(200).json({ results });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
 
-    } else if (action === "trocr") {
-        endpoint = `${HF_URL}/api/ai`;
-        body = req.body;
-
-    } else if (action === "flan-text") {
-        endpoint = `${HF_URL}/api/ai`;
-        body = req.body;
-
-    } else if (images) {
-        endpoint = `${HF_URL}/api/ai`;
-
-        // process each page using the GOOD pipeline
-        const results = [];
-
-        for (let i = 0; i < images.length; i++) {
-            const response = await fetch(endpoint, {
+    if (image) {
+        try {
+            const response = await fetch(`${HF_URL}/api/ai`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    action: "process_page",
-                    image: images[i],
-                    page_num: i + 1
+                    action:   "process_page",
+                    image,
+                    page_num: 1,
                 }),
             });
-
-            const data = await response.json();
-            results.push(data);
+            if (!response.ok) {
+                const text = await response.text();
+                return res.status(response.status).json({ error: text });
+            }
+            return res.status(200).json(await response.json());
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
         }
-
-        return res.status(200).json({ results });
-
-    } else if (image) {
-        endpoint = `${HF_URL}/api/ai`;
-        body = {
-            action: "process_page",
-            image,
-            page_num: 1
-        };
-
-    } else if (prompt) {
-        endpoint = `${HF_URL}/analyze`;
-        body = { prompt };
-
-    } else {
-        return res.status(400).json({
-            error: "Unknown request — no action, image, or prompt"
-        });
     }
 
-    try {
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            const text = await response.text();
-            return res.status(response.status).json({ error: text });
+    if (prompt) {
+        try {
+            const response = await fetch(`${HF_URL}/api/ai`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "flan-text",
+                    prompt,
+                    system: system || "",
+                }),
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                return res.status(response.status).json({ error: text });
+            }
+            return res.status(200).json(await response.json());
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
         }
-
-        const data = await response.json();
-        return res.status(200).json(data);
-
-    } catch (err) {
-        return res.status(500).json({ error: err.message });
     }
+
+    return res.status(400).json({
+        error: "Unknown request — provide action, image(s), or prompt",
+    });
 }
