@@ -360,10 +360,6 @@ let APP = {
   completedPages: new Set(['input'])
 };
 
-// ── MODEL / SPACE CONSTANTS ──
-const DEFAULT_TEXT_MODEL   = 'google/flan-t5-xxl';
-const DEFAULT_PADDLE_SPACE = 'your-hf-user/paddleocr-space';
-const DEFAULT_TROCR_SPACE  = 'your-hf-user/trocr-space';
 const DEFAULT_TIMEOUT_MIN  = 15;
 
 const DEFAULT_SYSTEM = [
@@ -415,7 +411,7 @@ async function handleFiles(files) {
       await handlePDF(f);
     } else if (isImg) {
       try {
-        const b64 = await compressImageFile(f, 2000, 0.92);
+        const b64 = await compressImageFile(f, 3000, 0.97);
         APP.images.push({ base64: b64, mimeType: 'image/jpeg', name: f.name });
       } catch(e) {
         showUploadError(`Could not load image "${f.name}": ${e.message}`);
@@ -502,13 +498,13 @@ async function handlePDF(file) {
     for (let p = 1; p <= pdf.numPages; p++) {
       prog.textContent = `Converting page ${p}/${pdf.numPages}…`;
       const page     = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2.5 });
+      const viewport = page.getViewport({ scale: 3.5 });
       const canvas   = document.createElement('canvas');
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       APP.images.push({
-        base64:   compressCanvas(canvas, 2200, 0.92),
+        base64:   compressCanvas(canvas, 3000, 0.97),
         mimeType: 'image/jpeg',
         name:     `${file.name} — p${p}`
       });
@@ -715,7 +711,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Page ${i + 1} of ${images.length} — running OCR pipeline…`,
-      'PaddleOCR → TrOCR → mark inference (all server-side)',
+      'Qwen2.5-VL reading page — OCR and marks in one pass',
       i, images.length
     );
   
@@ -758,16 +754,18 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   const combined = pageInterpretations.join('\n\n');
   APP.rawPageText = combined;
 
-  const totalExpectedQs = (combined.match(/^Q[\w()]+:/gm) || []).length;
+  const _qMatches = [...combined.matchAll(/\bQ(\d+[a-zA-Z]?(?:\([ivx]+\))?)[.:\s]/gi)];
+  const totalExpectedQs = new Set(_qMatches.map(m => m[1].toLowerCase())).size;
   const countHint = totalExpectedQs > 0
-    ? `\n\nQUESTION COUNT CHECK: The transcripts contain ${totalExpectedQs} question blocks across ${images.length} page(s). ` +
-      `Your "questions" array MUST have exactly ${totalExpectedQs} entries in page order.`
+    ? `\n\nQUESTION COUNT CHECK: The transcripts reference approximately ${totalExpectedQs} distinct question identifiers across ${images.length} page(s). ` +
+      `Your "questions" array should have one entry per question or sub-part in page order.`
     : '';
 
   const provenanceNote = `\n\nDATA PROVENANCE NOTE:
-- Question text and marks available: trust [PRINTED TEXT] (PaddleOCR)
-- Student answers and working: trust [STUDENT HANDWRITING] (TrOCR)
-- Marks awarded: trust [TEACHER MARKS] (Qwen mark inference)
+- All content extracted by Qwen2.5-VL vision model in a single pass per page
+- Trust [PRINTED TEXT] for question text and mark allocations
+- Trust [STUDENT HANDWRITING] for student answers and working
+- Trust [TEACHER MARKS] for marks awarded by the teacher
 - Priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
 
   const ocrIsEmpty = pageInterpretations.every(b => b.includes('OCR_EMPTY'));
@@ -784,7 +782,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   If you cannot find a question in the text below, it does not exist in this exam.
   `;
   
-  const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by 3-stage OCR pipeline):\n${combined}${provenanceNote}${countHint}`;
+  const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by Qwen2.5-VL vision model):\n${combined}${provenanceNote}${countHint}`;
   const finalOut = await runpodCall({
     action: 'flan-text',
     model:  DEFAULT_TEXT_MODEL,
@@ -990,6 +988,7 @@ function normalizeAnalysis(d) {
         if (oNum === num) return false;
         if (!oNum.startsWith(num)) return false;
         const suffix = oNum.slice(num.length);
+        if (/^\d/.test(suffix)) return false; 
         return /^[a-zA-Z(]/.test(suffix);
       });
       return !hasChildren;
@@ -1202,7 +1201,7 @@ async function runAnalysis() {
   );
 
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
-  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) will be read by the OCR pipeline and provided as text below]` : '';
+  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) were read by Qwen2.5-VL and the structured transcripts are provided below]` : '';
 
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathAnalysisRules()}
