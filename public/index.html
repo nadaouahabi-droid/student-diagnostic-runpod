@@ -766,7 +766,9 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 - All content extracted by Qwen2.5-VL vision model in a single pass per page
 - Trust [PRINTED TEXT] for question text and mark allocations
 - Trust [STUDENT HANDWRITING] for student answers and working
-- Trust [TEACHER MARKS] for marks awarded by the teacher
+- Trust [TEACHER MARKS] for marks awarded — X/cross = 0, tick = full marks, circled number = exact marks
+- [MARK ALLOCATIONS] gives marks available — look for [n] at line end or (n marks) notation
+- If [TEACHER MARKS] says "unmarked", fall back to student answer quality
 - Priority order: TEACHER MARKS > PRINTED TEXT > STUDENT HANDWRITING`;
 
   const ocrIsEmpty = pageInterpretations.every(b => b.includes('OCR_EMPTY'));
@@ -1123,7 +1125,8 @@ MATHEMATICS-SPECIFIC OCR RULES — follow exactly:
 - Method marks (M), Accuracy marks (A), Follow-through marks (ft/FT): note them
 - Working-out lines (even crossed out): transcribe fully — this is critical for diagnosing method errors
 - Box or circle around final answer: note as [FINAL ANSWER: ...]
-- Teacher marks are always annotated — only count ticks, crosses, and circled/boxed numbers as marks awarded`;
+- AWARDED MARKS PRIORITY ORDER: (1) circled/boxed number written by teacher — use directly as marksAwarded; (2) tick = full marks for that question; (3) red X or plain X = 0 marks awarded; (4) if completely unmarked, infer from whether the student answer matches expected
+- A red X anywhere on a student answer overrides everything — marksAwarded = 0 for that question;
 }
 
 function mathAnalysisRules() {
@@ -1228,8 +1231,19 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
 3. If a question number is visible but you cannot read the text or the question does not exist, omit it entirely — do not include it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. TEACHER MARK RULE: if the teacher wrote 0, record marksAwarded as 0 UNLESS explicitly corrected.
-
+5. TEACHER MARK RULE: Priority order for marksAwarded —
+   (1) Red or plain X / cross (✗) next to or through an answer = 0, overrides everything else.
+   (2) A number written in red ink near the answer = exact marksAwarded, use directly.
+   (3) A circled or boxed number written by teacher = exact marksAwarded, use directly.
+   (4) A tick (✓) = full marks for that question or sub-part.
+   (5) If completely unmarked, estimate from student answer quality but set marksAwarded conservatively and note it.
+   Never award marks where an X is present regardless of answer quality.
+6. MARKS AVAILABLE RULE: Priority order for marksAvailable —
+   (1) [n] at the end of the question line e.g. [2] or [3] = n marks available.
+   (2) [n] at the end of an answer field e.g. "Answer ...... [1]" = n marks available.
+   (3) (n marks) or (n) printed alongside the question or answer box = n marks available.
+   (4) A printed number in a box or circle appearing BEFORE any student writing = marks available, not awarded.
+   Scan both the question text line AND the answer field/box for these. Never confuse a printed allocation with a handwritten teacher mark.
 ${mathChainOfThought()}Return ONLY valid JSON — no markdown, no preamble, no trailing commas, double quotes only.
 
 CRITICAL JSON CHARACTER RULES (violations cause a parse error at the character level):
