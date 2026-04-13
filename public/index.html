@@ -969,16 +969,15 @@ function parseJSON(raw) {
   }
 }
 
-// ── NORMALIZER ──
 function normalizeAnalysis(d) {
   d.marksObtained=parseFloat(String(d.marksObtained).replace(/[^\d.]/g,''))||0;
   d.totalMarks=parseFloat(String(d.totalMarks).replace(/[^\d.]/g,''))||0;
   if(Array.isArray(d.questions)&&d.questions.length>0){
     d.questions=d.questions.map((q,idx)=>({
       ...q,
-      number:String(q.number||'').replace(/^Q/i,'').trim()||'0',
-      marksAvailable:parseFloat(String(q.marksAvailable||0).replace(/[^\d.]/g,''))||0,
-      marksAwarded:parseFloat(String(q.marksAwarded||0).replace(/[^\d.]/g,''))||0,
+      number: String(q.number || q.question_number || '').replace(/^Q/i,'').trim() || '0',
+      marksAvailable: parseFloat(String(q.marksAvailable || q.marks_available || q.marks || 0).replace(/[^\d.]/g,'')) || 0,
+      marksAwarded:   parseFloat(String(q.marksAwarded   || q.marks_awarded   || 0         ).replace(/[^\d.]/g,'')) || 0,
       questionText:q.questionText||'',topic:q.topic||'Unknown',
       _origIdx: idx
     }));
