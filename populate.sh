@@ -29,7 +29,7 @@ done
 # Pull ONLY Qwen model
 echo "=== Pulling Qwen ==="
 OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS="$OLLAMA_MODELS" \
-ollama pull qwen2.5vl:7b-q8_0
+ollama pull qwen2.5vl:7b-q4_K_M
 
 # Stop Ollama
 kill "$PID" 2>/dev/null || true
