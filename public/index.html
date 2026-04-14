@@ -703,7 +703,14 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       system: customSystemMsg || DEFAULT_SYSTEM,
       prompt: prompt,
     }, timeoutMin * 60000 + 30000);
-    return out.generated_text || out.content || '';
+    
+    console.log("HF response (text path):", out);
+    
+    return out.generated_text 
+        || out.content 
+        || out.text 
+        || out.output 
+        || '';
   }
 
   // ── Image path — 1 call per page (all 3 stages run server-side) ──
@@ -721,6 +728,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       image:    images[i].base64,
       page_num: i + 1,
     }, timeoutMin * 60000);
+    console.log(`HF response (page ${i+1}):`, out);
   
     if (out && out.error && !out.page_block) {
       throw new Error(`Page ${i + 1} OCR failed on server: ${out.error.slice(0, 300)}`);
@@ -792,9 +800,13 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     system: customSystemMsg || DEFAULT_SYSTEM,
     prompt: fullPrompt,
   }, timeoutMin * 3 * 60000 + 30000);
+  console.log("HF FINAL ANALYSIS RESPONSE:", finalOut);
 
-  clearInterval(window._stageInterval);
-  return finalOut.generated_text || finalOut.content || '';
+  return finalOut.generated_text 
+      || finalOut.content 
+      || finalOut.text 
+      || finalOut.output 
+      || '';
 }
   
 async function verifyMarksWithVision(images, pageInterpretations) {
