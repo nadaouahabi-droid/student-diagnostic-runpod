@@ -792,8 +792,6 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   You MUST NOT use the subject name, grade, or any other metadata to infer or fabricate questions.
   If you cannot find a question in the text below, it does not exist in this exam.
   `;
-  const MAX_COMBINED = 40000;
-  const combined = pageInterpretations.join('\n\n').slice(0, MAX_COMBINED);
   const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by Qwen2.5-VL vision model):\n${combined}${provenanceNote}${countHint}`;
   const finalOut = await runpodCall({
     action: 'flan-text',
