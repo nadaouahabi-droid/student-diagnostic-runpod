@@ -21,7 +21,7 @@ export OLLAMA_HOST="${OLLAMA_ADDR}"
 
 MODELS=(
     "qwen3:8b-q4_K_M"
-    "qwen3-vision:8b-q8_0"
+    "qwen2.5vl:7b"
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
