@@ -945,11 +945,17 @@ function parseJSON(raw) {
 
     out = out.replace(/("(?:[^"\\]|\\.)*?")\s*(?![\s:,\]\}])(")/g, '$1: $2');
 
+    out = out.replace(/("(?:[^"\\]|\\.)*?"|[\d.]+|true|false|null|\]|\})\s*\n\s*("|\{|\[)/g, '$1,\n$2');
+
+    out = out.replace(/("(?:[^"\\]|\\.)*?")(\s*)("(?:[^"\\]|\\.)*?"\s*:)/g, '$1,$2$3');
+
     return out;
   }
 
   function closeTruncated(r) {
     r = r.replace(/,\s*\{[^}[\]]*$/, '');
+    r = r.replace(/"[^"\\]*$/, '');
+    r = r.replace(/,\s*"[^"]*"\s*$/, '');
     r = r.replace(/,?\s*$/, '');
     let ob = 0, cb = 0, oa = 0, ca = 0;
     let inS = false;
