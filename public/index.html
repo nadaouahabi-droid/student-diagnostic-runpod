@@ -1248,20 +1248,23 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
 3. If a question number is visible but you cannot read the text or the question does not exist, omit it entirely — do not include it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. MARKS AWARDED RULE — primary evidence is the student answer field (black/green ink):
+5. MARKS AWARDED RULE:
+   Read the [TEACHER MARKS] section FIRST for every question.
+   Scan all four locations: right of answer, right margin, top-right of box, bottom of box.
    Priority order for marksAwarded:
-   (1) Red X or cross (✗) through or beside the answer = 0 marks — overrides everything.
-   (2) Red circled or boxed number written by teacher = exact marksAwarded — use directly.
-   (3) Red tick (✓) = full marks confirmed for that question or sub-part.
-   (4) PRIMARY — if the question is marked as [unmarked] or has no teacher annotation:
-       Read the student answer from [STUDENT ANSWER FIELDS] (black/green ink).
-       If the answer field is [BLANK] or [illegible] = 0 marks.
-       If the student wrote an answer: compare it against what a correct answer would be
-       for that question topic and mark accordingly — be fair but accurate.
-       For numeric answers: exact match = full marks, method visible but wrong answer = half marks.
-       For descriptive answers: key idea present = full marks, partial = half, absent = 0.
-   (5) If the answer field is blank AND no teacher mark = 0 marks (no attempt).
-   Never invent marks. Never award marks where a red X is present.
+   (1) "cross — 0 marks" in [TEACHER MARKS] = 0, overrides everything, no exceptions.
+   (2) "circled N" or "red N" in [TEACHER MARKS] = exactly N marks awarded — use directly.
+   (3) "partial red — 0.5" in [TEACHER MARKS] = 0.5 marks awarded.
+   (4) "tick — full marks" in [TEACHER MARKS] = marksAvailable for that question.
+   (5) [PAGE TOTAL: N] at page bottom = use as a cross-check only, not as per-question marks.
+   (6) "unmarked" in [TEACHER MARKS] — ONLY then read [STUDENT ANSWER FIELDS]:
+       - [BLANK] or [illegible] = 0 marks (no attempt).
+       - Student wrote a numeric answer: compare to expected. Exact match = full marks.
+         Correct method visible but wrong final number = round(marksAvailable * 0.5).
+       - Student wrote a descriptive answer: key idea present = full marks, vague = half, absent = 0.
+       - Always set marksAwarded conservatively when inferring — never exceed marksAvailable.
+   Never award marks where a cross/X is recorded regardless of the student answer quality.
+   If [TEACHER MARKS] has a circled number AND a cross on the same question, the cross wins (0 marks).
 6. MARKS AVAILABLE RULE: Priority order for marksAvailable —
    (1) [n] at the end of the question line e.g. [2] or [3] = n marks available.
    (2) [n] at the end of an answer field e.g. "Answer ...... [1]" = n marks available.
