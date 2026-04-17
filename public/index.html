@@ -1248,13 +1248,20 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
 2. Every marksAvailable and marksAwarded value must come directly from what you read in the exam.
 3. If a question number is visible but you cannot read the text or the question does not exist, omit it entirely — do not include it.
 4. topicPerformance scores must be computed from the questions array marks — not estimated independently.
-5. TEACHER MARK RULE: Priority order for marksAwarded —
-   (1) Red or plain X / cross (✗) next to or through an answer = 0, overrides everything else.
-   (2) A number written in red ink near the answer = exact marksAwarded, use directly.
-   (3) A circled or boxed number written by teacher = exact marksAwarded, use directly.
-   (4) A tick (✓) = full marks for that question or sub-part.
-   (5) If completely unmarked, estimate from student answer quality but set marksAwarded conservatively and note it.
-   Never award marks where an X is present regardless of answer quality.
+5. MARKS AWARDED RULE — primary evidence is the student answer field (black/green ink):
+   Priority order for marksAwarded:
+   (1) Red X or cross (✗) through or beside the answer = 0 marks — overrides everything.
+   (2) Red circled or boxed number written by teacher = exact marksAwarded — use directly.
+   (3) Red tick (✓) = full marks confirmed for that question or sub-part.
+   (4) PRIMARY — if the question is marked as [unmarked] or has no teacher annotation:
+       Read the student answer from [STUDENT ANSWER FIELDS] (black/green ink).
+       If the answer field is [BLANK] or [illegible] = 0 marks.
+       If the student wrote an answer: compare it against what a correct answer would be
+       for that question topic and mark accordingly — be fair but accurate.
+       For numeric answers: exact match = full marks, method visible but wrong answer = half marks.
+       For descriptive answers: key idea present = full marks, partial = half, absent = 0.
+   (5) If the answer field is blank AND no teacher mark = 0 marks (no attempt).
+   Never invent marks. Never award marks where a red X is present.
 6. MARKS AVAILABLE RULE: Priority order for marksAvailable —
    (1) [n] at the end of the question line e.g. [2] or [3] = n marks available.
    (2) [n] at the end of an answer field e.g. "Answer ...... [1]" = n marks available.
