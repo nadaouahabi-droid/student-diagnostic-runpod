@@ -1676,7 +1676,15 @@ async function runPlan() {
     .map(q => `Q${q.number}: ${safeStr(q.questionText)} (${q.marksAwarded}/${q.marksAvailable})`)
     .slice(0, 3).join('; ') || 'general weak area';
 
-  const prompt = `Create a personalised 4-week study action plan. Return ONLY a single valid JSON object. No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values ASCII under 80 chars. No newlines inside strings.
+  const prompt = `Create a personalised 4-week study action plan. 
+Return ONLY valid JSON.
+
+Rules:
+- Use double quotes for all keys and string values
+- Escape quotes inside strings using \"
+- Do not include any explanation or text outside JSON
+- Do not use markdown
+- Ensure the JSON is syntactically valid No markdown. No prose. No trailing commas. Double quotes only. No apostrophes. No special math symbols (use ^2 not squared, sqrt() not root symbol, +/- not plus-minus). All string values ASCII under 80 chars. No newlines inside strings.
 
 Student: ${studentName}, ${grade}, ${subject}
 Current score: ${currentScore}%
