@@ -826,6 +826,7 @@ async function callOllamaMultiPage(prompt, images) {
 
 function aggressiveSanitize(s) {
   if (!s) return s;
+  s = s.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   const MATH = [
     [/\u00b2/g,'^2'],[/\u00b3/g,'^3'],[/\u2074/g,'^4'],[/\u00b9/g,'^1'],
     [/\u00bd/g,'1/2'],[/\u00bc/g,'1/4'],[/\u00be/g,'3/4'],
