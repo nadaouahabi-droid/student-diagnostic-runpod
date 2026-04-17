@@ -361,7 +361,8 @@ let APP = {
 };
 
 const DEFAULT_TIMEOUT_MIN  = 15;
-const DEFAULT_TEXT_MODEL   = 'qwen2.5-vl:7b-q4_K_M';
+const DEFAULT_VISION_MODEL = 'qwen3-vision:8b-q8_0';   // OCR / page reading
+const DEFAULT_TEXT_MODEL   = 'qwen3:8b-q4_K_M';        // JSON analysis / planning
 
 const DEFAULT_SYSTEM = [
   'You are an expert educational diagnostic specialist.',
@@ -713,18 +714,20 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
         || '';
   }
 
-  // ── Image path — 1 call per page (all 3 stages run server-side) ──
+  // ── Image path — 1 call per page (OCR via vision model, analysis via text model) ──
   const pageInterpretations = [];
 
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Page ${i + 1} of ${images.length} — running OCR pipeline…`,
-      'Qwen2.5-VL reading page — OCR and marks in one pass',
+      `${DEFAULT_VISION_MODEL} reading page`,
       i, images.length
     );
   
+    // OCR step: vision model reads the page and returns structured plain text
     const out = await runpodCall({
       action:   'process_page',
+      model:    DEFAULT_VISION_MODEL,   // ← qwen3-vision:8b-q8_0 for OCR
       image:    images[i].base64,
       page_num: i + 1,
     }, timeoutMin * 60000);
@@ -742,13 +745,13 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 
     setLoadingState('analysis',
       `Pages processed: ${i + 1} of ${images.length}`,
-      'All OCR stages complete for this page',
+      'OCR complete for this page',
       i + 1, images.length
     );
   }
 
-  // ── Build final analysis prompt ──
-  updateLoadingText('analysis', 'Building your diagnostic…', 'Analysing every question with Qwen');
+  // ── Build final analysis prompt — JSON generation uses text model only ──
+  updateLoadingText('analysis', 'Building your diagnostic…', `Analysing with ${DEFAULT_TEXT_MODEL}`);
   const analysisStages = [
     'Identifying topic gaps…', 'Classifying mistake patterns…',
     'Computing topic scores…', 'Checking for recurring errors…', 'Finalising your report…',
@@ -771,7 +774,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
     : '';
 
   const provenanceNote = `\n\nDATA PROVENANCE NOTE:
-- All content extracted by Qwen2.5-VL vision model in a single pass per page
+- All content extracted by ${DEFAULT_VISION_MODEL} vision model in a single pass per page
 - Trust [PRINTED TEXT] for question text and mark allocations
 - Trust [STUDENT HANDWRITING] for student answers and working
 - Trust [TEACHER MARKS] for marks awarded — X/cross = 0, tick = full marks, circled number = exact marks
@@ -792,10 +795,12 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
   You MUST NOT use the subject name, grade, or any other metadata to infer or fabricate questions.
   If you cannot find a question in the text below, it does not exist in this exam.
   `;
-  const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by Qwen2.5-VL vision model):\n${combined}${provenanceNote}${countHint}`;
+  const fullPrompt = `${prompt}\n\n${groundingHeader}\nEXAM CONTENT (${images.length} pages, extracted by ${DEFAULT_VISION_MODEL}):\n${combined}${provenanceNote}${countHint}`;
+
+  // JSON analysis uses the pure-text instruct model — no vision required here
   const finalOut = await runpodCall({
     action: 'flan-text',
-    model:  DEFAULT_TEXT_MODEL,
+    model:  DEFAULT_TEXT_MODEL,         // ← qwen3:8b-q4_K_M for JSON output
     system: customSystemMsg || DEFAULT_SYSTEM,
     prompt: fullPrompt,
   }, timeoutMin * 3 * 60000 + 30000);
@@ -1223,12 +1228,12 @@ async function runAnalysis() {
 
   setLoadingState('analysis',
     hasVisual ? `Reading exam pages… (${imgs.length} page${imgs.length>1?'s':''})` : 'Analysing exam…',
-    hasVisual ? 'Extracting text and handwriting' : 'Processing exam content',
+    hasVisual ? `${DEFAULT_VISION_MODEL} extracting text` : 'Processing exam content',
     0, imgs.length
   );
 
   const textNote   = APP.script ? `\nExam Script:\n${APP.script}` : '';
-  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) were read by Qwen2.5-VL and the structured transcripts are provided below]` : '';
+  const visualNote = imgs.length ? `\n[${imgs.length} exam page image(s) were read by ${DEFAULT_VISION_MODEL} and the structured transcripts are provided below]` : '';
 
   const prompt = `You are an expert ${isMath() ? 'mathematics' : 'educational'} diagnostic specialist. Analyse this student exam carefully.${visualNote}
 ${mathOCRRules()}
@@ -1710,7 +1715,7 @@ ${mathPlanExtras()}`;
   async function planCall(p) {
     return (await runpodCall({
       action: 'flan-text',
-      model: DEFAULT_TEXT_MODEL,
+      model: DEFAULT_TEXT_MODEL,   // ← qwen3:8b-q4_K_M
       system: 'You are an expert educational planner. Return ONLY valid JSON. No markdown. No apostrophes. Double quotes only. No trailing commas. All string values under 80 characters. The targetScore field must be exactly the number provided — do not change it. Every action string must be specific to the student weak topics and wrong questions given — never write generic actions.',
       prompt: p,
     }, DEFAULT_TIMEOUT_MIN * 60000 + 30000)).generated_text || '';
