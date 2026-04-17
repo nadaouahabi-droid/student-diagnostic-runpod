@@ -943,6 +943,8 @@ function parseJSON(raw) {
       '"' + inner.replace(/ {2,}/g, ' ') + '"'
     );
 
+    out = out.replace(/("(?:[^"\\]|\\.)*?")\s*(?![\s:,\]\}])(")/g, '$1: $2');
+
     return out;
   }
 
