@@ -755,8 +755,7 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
 
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
-      `Page ${i + 1} of ${images.length} — running OCR pipeline…`,
-      `${DEFAULT_VISION_MODEL} reading page`,
+      `Analyzing page ${i + 1} of ${images.length} — in progress…`,
       i, images.length
     );
 
