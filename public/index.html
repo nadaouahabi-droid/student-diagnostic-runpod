@@ -1319,8 +1319,20 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
          Correct method visible but wrong final number = round(marksAvailable * 0.5).
        - Student wrote a descriptive answer: key idea present = full marks, vague = half, absent = 0.
        - Always set marksAwarded conservatively when inferring — never exceed marksAvailable.
-   CROSS-CHECK: After setting all marksAwarded values, read the [MARKS VERIFICATION PASS]
-   section at the bottom of the page transcript and reconcile any conflict:
+   CROSS-CHECK: Each page transcript may contain two supplementary sections:
+   [MARKS VERIFICATION PASS] — a text list of red-ink annotations
+   [MARKS DETECTION MODEL — JSON] — a JSON array from a dedicated marks-detection model
+   that combines visual evidence with student answer quality inference.
+
+   Reconciliation priority order (highest to lowest):
+   1. [MARKS DETECTION MODEL — JSON] entry with confidence="high" and source="teacher_mark"
+   2. [MARKS VERIFICATION PASS] explicit annotation (cross, tick, circled number)
+   3. [MARKS DETECTION MODEL — JSON] entry with confidence="medium" (answer inference)
+   4. [TEACHER MARKS] section from OCR tiles
+   5. Your own reading of [STUDENT ANSWER FIELDS]
+
+   If [MARKS DETECTION MODEL — JSON] gives a marksAwarded value for a question,
+   prefer it over your own reading UNLESS it conflicts with a visible cross (0 marks wins always).
    if [MARKS VERIFICATION PASS] gives a different mark than [TEACHER MARKS], use the
    LOWER of the two values (conservative, prevents over-awarding).
    If [MARKS VERIFICATION PASS] says "cross" for a question you marked as non-zero, set it to 0.
