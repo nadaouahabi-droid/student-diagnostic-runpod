@@ -1127,7 +1127,7 @@ function goPage(p) {
 }
 function navToReport() {
   if (!APP.completedPages.has('report')) return;
-  if (APP.analysis && !APP.report) { runReport(); } else { goPage('report'); }
+  goPage('report');
 }
 function navToWorksheet() {
   if (!APP.completedPages.has('worksheet')) return;
@@ -1520,14 +1520,23 @@ async function runReport() {
   const d = APP.analysis;
   if (!d) { document.getElementById('report-content').innerHTML = errCard('Analysis not complete.'); return; }
 
-  const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>t.topic).join(', ')||'none';
-  const mistakes    = (d.keyMistakes||[]).map(m=>m.title).join(', ')||'none';
+  function rSafe(s, max) {
+    return String(s||'')
+      .replace(/["'`]/g, '')
+      .replace(/[^\x20-\x7E]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, max || 80);
+  }
+
+  const weakTopics  = (d.topicPerformance||[]).filter(t=>t.level==='weak').map(t=>rSafe(t.topic,40)).join(', ')||'none';
+  const mistakes    = (d.keyMistakes||[]).map(m=>rSafe(m.title,60)).join(', ')||'none';
   const errorTypes  = (d.keyMistakes||[]).map(m=>m.errorType||'').filter(Boolean);
   const conceptErrs = (d.keyMistakes||[]).filter(m=>m.errorType==='method error'||m.errorType==='conceptual gap');
   const carelessErrs= (d.keyMistakes||[]).filter(m=>m.errorType==='arithmetic slip'||m.errorType==='sign error');
 
   const questionGroundTruth = (d.questions||[]).length > 0
-    ? `GROUND-TRUTH QUESTION LIST (from analysis — do not add, remove, or renumber):\n${d.questions.map(q=>`Q${q.number}: "${q.questionText}" | topic: ${q.topic} | available: ${q.marksAvailable} | awarded: ${q.marksAwarded}`).join('\n')}`
+    ? `GROUND-TRUTH QUESTION LIST (from analysis — do not add, remove, or renumber):\n${d.questions.map(q=>`Q${q.number}: ${rSafe(q.questionText,60)} | topic: ${rSafe(q.topic,35)} | available: ${q.marksAvailable} | awarded: ${q.marksAwarded}`).join('\n')}`
     : `Score: ${d.marksObtained}/${d.totalMarks}. No per-question breakdown available — use topic data only.`;
 
   const prompt = `You are an expert ${isMath()?'mathematics teacher':'educational specialist'} writing a personalised diagnostic report.
@@ -1556,18 +1565,23 @@ INSTRUCTIONS:
 - questionBreakdown: use EXACTLY the questions from the GROUND-TRUTH QUESTION LIST above
 - For each question: errorType = "correct" | "careless" | "concept" | "no attempt" | "partial"
 - marksLost = marksAvailable - marksAwarded
-- diagnosis: 1 sentence, under 120 chars, no double-quotes, ASCII only
-- summary: 2-3 sentences, under 300 chars total, no apostrophes, ASCII only
-- conceptGaps: only for genuine conceptual misunderstandings
-- feedback: 2-3 sentences, under 300 chars, no apostrophes, ASCII only
+- diagnosis: 1 sentence MAX, under 80 chars, no quotes of any kind, ASCII only
+- summary: 2 sentences MAX, under 200 chars TOTAL, no apostrophes, no quotes, ASCII only
+- conceptGaps: max 3 items, description under 80 chars each, no quotes
+- feedback: 2 sentences MAX, under 180 chars TOTAL, no apostrophes, no quotes, ASCII only
+- Every string field: ASCII only, no quotes, no apostrophes, no backslashes
 
 ${mathReportRules()}
 
 Return this exact JSON structure:
-{"studentOverview":{"student":"${APP.studentName}","level":"${APP.grade}","score":"${d.marksObtained}/${d.totalMarks}","grade":"${d.grade}","potentialScore":"","potentialGrade":""},"diagnosis":{"conceptErrorMarksLost":0,"carelessMistakesMarksLost":0,"totalMarksLost":0,"biggestWeakTopic":""},"summary":"","questionBreakdown":[{"question":"Q1","topic":"","marks":0,"score":"","errorType":"correct","marksLost":0,"diagnosis":""}],"conceptGaps":[{"topic":"","description":""}],"feedback":""}`;
+{"studentOverview":{"student":"${rSafe(APP.studentName,40)}","level":"${rSafe(APP.grade,20)}","score":"${d.marksObtained}/${d.totalMarks}","grade":"${d.grade}","potentialScore":"","potentialGrade":""},"diagnosis":{"conceptErrorMarksLost":0,"carelessMistakesMarksLost":0,"totalMarksLost":0,"biggestWeakTopic":""},"summary":"","questionBreakdown":[{"question":"Q1","topic":"","marks":0,"score":"","errorType":"correct","marksLost":0,"diagnosis":""}],"conceptGaps":[{"topic":"","description":""}],"feedback":""}`;
 
   try {
-    const raw  = await callAI(prompt);
+    let raw = await callAI(prompt);
+    raw = raw
+      .replace(/[\u2018\u2019\u201c\u201d]/g, ' ')  
+      .replace(/\u2013|\u2014/g, '-')              
+      .replace(/[\u0080-\uFFFF]/g, ' ');       
     APP.report = parseJSON(raw);
     renderReport(APP.report);
   } catch(e) {
