@@ -626,7 +626,7 @@ function setLoadingState(pageId, title, sub, current, total) {
         <!-- centre content -->
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
           ${total >= 1 ? `
-            <span style="font-family:'DM Serif Display',serif;font-size:28px;line-height:1;color:var(--navy);font-weight:400">${pct}%</span>
+            <span id="sub-pct" style="font-family:'DM Serif Display',serif;font-size:28px;line-height:1;color:var(--navy);font-weight:400">${pct}%</span>
             <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3)">complete</span>
           ` : `
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -690,10 +690,8 @@ function startSubProgress(fromPct, toPct, durationMs) {
     dot.setAttribute('cx', 70 + 58 * Math.cos(rad));
     dot.setAttribute('cy', 70 + 58 * Math.sin(rad));
 
-    const centre = ring.closest('svg')?.parentElement?.querySelector('span');
-    if (centre && /^\d+$/.test(centre.textContent)) {
-      centre.textContent = Math.round(pct);
-    }
+    const pctLabel = document.getElementById('sub-pct');
+    if (pctLabel) pctLabel.textContent = Math.round(pct) + '%';
 
     if (t >= 1) clearInterval(_subProgressTimer);
   }, 80);
