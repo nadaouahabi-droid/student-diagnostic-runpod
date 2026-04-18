@@ -750,12 +750,12 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
         || '';
   }
 
-  // ── Image path — 1 call per page (OCR via vision model, analysis via text model) ──
   const pageInterpretations = [];
 
   for (let i = 0; i < images.length; i++) {
     setLoadingState('analysis',
       `Analyzing page ${i + 1} of ${images.length} — in progress…`,
+      '',
       i, images.length
     );
 
