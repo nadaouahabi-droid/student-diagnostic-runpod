@@ -610,13 +610,13 @@ function setLoadingState(pageId, title, sub, current, total) {
             style="animation:spin 1.4s linear infinite;transform-origin:70px 70px"/>
           ` : `
           <!-- progress ring -->
-          <circle cx="70" cy="70" r="58" fill="none" stroke="url(#ring-grad)" stroke-width="8"
+          <circle id="sub-ring" cx="70" cy="70" r="58" fill="none" stroke="url(#ring-grad)" stroke-width="8"
             stroke-dasharray="${2 * Math.PI * 58}"
             stroke-dashoffset="${2 * Math.PI * 58 * (1 - pct / 100)}"
             stroke-linecap="round"
             style="transition:stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)"/>
           <!-- dot at the tip of the progress arc -->
-          <circle
+          <circle id="sub-dot"
             cx="${70 + 58 * Math.cos((2 * Math.PI * pct / 100) - Math.PI / 2)}"
             cy="${70 + 58 * Math.sin((2 * Math.PI * pct / 100) - Math.PI / 2)}"
             r="5" fill="var(--amber)"
@@ -664,6 +664,44 @@ function updateLoadingText(pageId, title, sub) {
   const s = document.getElementById(pageId + '-loading-sub');
   if (t && title !== undefined) t.textContent = title;
   if (s && sub    !== undefined) s.textContent = sub;
+}
+
+// ── SUB-PROGRESS (smooth fill between page milestones) ──
+let _subProgressTimer = null;
+
+function startSubProgress(fromPct, toPct, durationMs) {
+  clearInterval(_subProgressTimer);
+  const C = 2 * Math.PI * 58;          // circumference ≈ 364.4
+  const capPct = fromPct + (toPct - fromPct) * 0.88; // never reach the next milestone visually
+  const startTime = Date.now();
+
+  _subProgressTimer = setInterval(() => {
+    const ring = document.getElementById('sub-ring');
+    const dot  = document.getElementById('sub-dot');
+    if (!ring || !dot) { clearInterval(_subProgressTimer); return; }
+
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(elapsed / durationMs, 1);
+    const eased = 1 - Math.pow(1 - t, 2.5);        
+    const pct = fromPct + (capPct - fromPct) * eased;
+    const rad = (2 * Math.PI * pct / 100) - Math.PI / 2;
+
+    ring.setAttribute('stroke-dashoffset', C * (1 - pct / 100));
+    dot.setAttribute('cx', 70 + 58 * Math.cos(rad));
+    dot.setAttribute('cy', 70 + 58 * Math.sin(rad));
+
+    const centre = ring.closest('svg')?.parentElement?.querySelector('span');
+    if (centre && /^\d+$/.test(centre.textContent)) {
+      centre.textContent = Math.round(pct);
+    }
+
+    if (t >= 1) clearInterval(_subProgressTimer);
+  }, 80);
+}
+
+function stopSubProgress() {
+  clearInterval(_subProgressTimer);
+  _subProgressTimer = null;
 }
 
 // ── API LAYER ──
@@ -723,14 +761,19 @@ async function callOCRPipeline(prompt, images, customSystemMsg) {
       `${DEFAULT_VISION_MODEL} reading page`,
       i, images.length
     );
+
+    const fromPct = Math.round((i / images.length) * 100);
+    const toPct   = Math.round(((i + 1) / images.length) * 100);
+    startSubProgress(fromPct, toPct, 28000); 
   
     // OCR step: vision model reads the page and returns structured plain text
     const out = await runpodCall({
       action:   'process_page',
-      model:    DEFAULT_VISION_MODEL,   // ← qwen3-vision:8b-q8_0 for OCR
+      model:    DEFAULT_VISION_MODEL,  
       image:    images[i].base64,
       page_num: i + 1,
     }, timeoutMin * 60000);
+    stopSubProgress();
     console.log(`HF response (page ${i+1}):`, out);
   
     if (out && out.error && !out.page_block) {
