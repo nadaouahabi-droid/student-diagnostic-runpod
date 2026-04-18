@@ -603,7 +603,7 @@ function setLoadingState(pageId, title, sub, current, total) {
           <!-- track -->
           <circle cx="70" cy="70" r="58" fill="none" stroke="var(--cream-dim)" stroke-width="8"/>
           <!-- animated idle ring shown when no progress yet -->
-          ${total <= 1 ? `
+          ${total < 1 ? `
           <circle cx="70" cy="70" r="58" fill="none" stroke="url(#ring-grad)" stroke-width="8"
             stroke-dasharray="${2 * Math.PI * 58 * 0.25} ${2 * Math.PI * 58 * 0.75}"
             stroke-linecap="round"
@@ -625,7 +625,7 @@ function setLoadingState(pageId, title, sub, current, total) {
         </svg>
         <!-- centre content -->
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
-          ${total > 1 ? `
+          ${total >= 1 ? `
             <span style="font-family:'DM Serif Display',serif;font-size:28px;line-height:1;color:var(--navy);font-weight:400">${pct}%</span>
             <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3)">complete</span>
           ` : `
