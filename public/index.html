@@ -1271,8 +1271,11 @@ STRICT GROUNDING RULES — violations will corrupt the entire diagnostic:
          Correct method visible but wrong final number = round(marksAvailable * 0.5).
        - Student wrote a descriptive answer: key idea present = full marks, vague = half, absent = 0.
        - Always set marksAwarded conservatively when inferring — never exceed marksAvailable.
-   Never award marks where a cross/X is recorded regardless of the student answer quality.
-   If [TEACHER MARKS] has a circled number AND a cross on the same question, the cross wins (0 marks).
+   CROSS-CHECK: After setting all marksAwarded values, read the [MARKS VERIFICATION PASS]
+   section at the bottom of the page transcript and reconcile any conflict:
+   if [MARKS VERIFICATION PASS] gives a different mark than [TEACHER MARKS], use the
+   LOWER of the two values (conservative, prevents over-awarding).
+   If [MARKS VERIFICATION PASS] says "cross" for a question you marked as non-zero, set it to 0.
 6. MARKS AVAILABLE RULE: Priority order for marksAvailable —
    (1) [n] at the end of the question line e.g. [2] or [3] = n marks available.
    (2) [n] at the end of an answer field e.g. "Answer ...... [1]" = n marks available.
